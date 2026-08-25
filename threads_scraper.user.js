@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Threads Full Post Scraper (DOM)
 // @namespace    https://threads.com/
-// @version      4.4.0
-// @description  Scrape semua post + replies user Threads via DOM parsing. Zero setup, no ad blocker issues.
+// @version      4.5.0
+// @description  Scrape semua post + replies user Threads via DOM parsing. Filter Shopee affiliate + batas tanggal. Zero setup, no ad blocker issues.
 // @author       You
 // @match        https://www.threads.net/@*
 // @match        https://www.threads.com/@*
@@ -21,6 +21,16 @@
         scrollDelay: 1800,
         maxNoNew: 12,
     };
+
+    // Keyword/domain yang menandakan link Shopee affiliate.
+    // Tambahin regex baru di sini kalau nemu domain shortlink lain.
+    const SHOPEE_LINK_PATTERNS = [
+        /s\.shopee\.co\.id/i,
+        /s\.shopee\.com/i,
+        /shp\.ee/i,
+        /shope\.ee/i,
+        /shopee\.co\.id\/[^\s"]*\?[^\s"]*(af_|utm_source=an_|smtt=|pid=)/i,
+    ];
 
     // ==================== STYLES ====================
     GM_addStyle(`
@@ -120,6 +130,9 @@
         }
         #ts-panel .ts-input:focus {
             border-color: #3f3f46;
+        }
+        #ts-panel select.ts-input {
+            cursor: pointer;
         }
 
         #ts-panel .ts-switch {
@@ -257,6 +270,7 @@
     let isRunning = false;
     let shouldStop = false;
     let collectedPosts = new Map();
+    let checkedShopeeCodes = new Set();
 
     // ==================== UI ====================
     function createPanel() {
@@ -267,7 +281,7 @@
             <div class="ts-header">
                 <div class="ts-title">
                     <span>Threads Scraper</span>
-                    <span class="ts-badge">v4.4</span>
+                    <span class="ts-badge">v4.5</span>
                 </div>
                 <button class="close-btn" id="ts-x">✕</button>
             </div>
@@ -277,9 +291,25 @@
                 <input type="number" class="ts-input" id="ts-delay" value="${CONFIG.scrollDelay}" min="500" step="100">
             </div>
 
+            <div class="ts-section">
+                <label class="ts-label">Batas waktu</label>
+                <select class="ts-input" id="ts-date-limit">
+                    <option value="0">Semua waktu</option>
+                    <option value="1">1 bulan terakhir</option>
+                    <option value="3">3 bulan terakhir</option>
+                    <option value="6">6 bulan terakhir</option>
+                    <option value="12">12 bulan terakhir</option>
+                </select>
+            </div>
+
             <div class="ts-switch" id="ts-switch-replies">
                 <span class="ts-switch-label">Include replies tab</span>
                 <div class="ts-toggle active" id="ts-toggle-replies"></div>
+            </div>
+
+            <div class="ts-switch" id="ts-switch-shopee">
+                <span class="ts-switch-label">Shopee affiliate only</span>
+                <div class="ts-toggle" id="ts-toggle-shopee"></div>
             </div>
 
             <div class="ts-switch" id="ts-switch-deep">
@@ -342,6 +372,11 @@
         const toggleDeep = document.getElementById('ts-toggle-deep');
         document.getElementById('ts-switch-deep').onclick = () => {
             toggleDeep.classList.toggle('active');
+        };
+
+        const toggleShopee = document.getElementById('ts-toggle-shopee');
+        document.getElementById('ts-switch-shopee').onclick = () => {
+            toggleShopee.classList.toggle('active');
         };
     }
 
@@ -512,6 +547,7 @@
                 like_count: likeCount,
                 images: [...new Set(images)],
                 has_video: hasVideo,
+                has_shopee_link: false,
                 url: `https://${window.location.hostname}/@${username}/post/${code}`,
             });
         }
@@ -545,20 +581,27 @@
         isRunning = true;
         shouldStop = false;
         collectedPosts.clear();
+        checkedShopeeCodes = new Set();
         setBtns('run');
 
         const delay = parseInt(document.getElementById('ts-delay').value) || CONFIG.scrollDelay;
         const includeReplies = document.getElementById('ts-toggle-replies').classList.contains('active');
         const deepMode = document.getElementById('ts-toggle-deep').classList.contains('active');
+        const shopeeOnly = document.getElementById('ts-toggle-shopee').classList.contains('active');
+        const dateLimitMonths = parseInt(document.getElementById('ts-date-limit').value) || 0;
+        const dateCutoff = dateLimitMonths > 0 ? getDateCutoff(dateLimitMonths) : null;
+        const scrapeOpts = { shopeeOnly, dateCutoff };
 
         log('🚀 Starting...');
+        if (shopeeOnly) log('🛒 Filter: hanya utas dengan link Shopee affiliate');
+        if (dateCutoff) log(`📅 Batas waktu: ${dateLimitMonths} bulan terakhir`);
 
         window.scrollTo(0, 0);
         await sleep(1000);
 
         // Phase 1: Posts tab
         log('📝 Scraping posts...');
-        await scrapeCurrentTab(delay);
+        await scrapeCurrentTab(delay, scrapeOpts);
 
         // Phase 2: Replies tab
         if (includeReplies && !shouldStop) {
@@ -570,7 +613,7 @@
                 window.scrollTo(0, 0);
                 await sleep(1000);
                 const before = collectedPosts.size;
-                await scrapeCurrentTab(delay);
+                await scrapeCurrentTab(delay, scrapeOpts);
                 log(`💬 Replies: +${collectedPosts.size - before}`);
                 const threadsTab = findThreadsTab();
                 if (threadsTab) threadsTab.click();
@@ -590,12 +633,94 @@
         setBtns('done');
 
         const withText = Array.from(collectedPosts.values()).filter(p => p.text).length;
-        log(`✅ Done: ${collectedPosts.size} posts (${withText} with text)`);
+        let doneMsg = `✅ Done: ${collectedPosts.size} posts (${withText} with text)`;
+        if (shopeeOnly) {
+            const withShopee = Array.from(collectedPosts.values()).filter(p => p.has_shopee_link).length;
+            doneMsg += `, ${withShopee} dengan link Shopee`;
+        }
+        log(doneMsg);
     }
 
-    async function scrapeCurrentTab(delay) {
+    function getDateCutoff(months) {
+        const d = new Date();
+        d.setMonth(d.getMonth() - months);
+        return d;
+    }
+
+    // Cek apakah sebuah thread_item (dari JSON halaman Threads) mengandung link Shopee affiliate
+    // di manapun — caption text, link preview, dsb — dengan cara scan seluruh string di dalam item-nya.
+    function itemHasShopeeLink(item) {
+        try {
+            const str = JSON.stringify(item);
+            return SHOPEE_LINK_PATTERNS.some(p => p.test(str));
+        } catch (e) {
+            return false;
+        }
+    }
+
+    // Ambil seluruh isi utas (semua segmen yang di-post berantai oleh author yang sama)
+    // dan cek apakah ada link Shopee affiliate di salah satu segmennya.
+    async function fetchFullThreadInfo(postUrl, authorUsername) {
+        if (!postUrl || !authorUsername) return null;
+        const result = { fullText: '', hasShopeeLink: false };
+
+        try {
+            const resp = await fetch(postUrl, {
+                headers: { 'Accept': 'text/html' },
+                credentials: 'include',
+            });
+            if (!resp.ok) return null;
+
+            const html = await resp.text();
+            const scriptRegex = /<script[^>]*type="application\/json"[^>]*data-sjs[^>]*>([\s\S]*?)<\/script>/g;
+            let match;
+            const items = [];
+
+            while ((match = scriptRegex.exec(html)) !== null) {
+                const content = match[1];
+                if (!content.includes('thread_items')) continue;
+                try {
+                    const data = JSON.parse(content);
+                    const threadItemsArrays = findNestedKey(data, 'thread_items');
+                    for (const arr of threadItemsArrays) {
+                        if (Array.isArray(arr)) items.push(...arr);
+                    }
+                } catch (e) {}
+            }
+
+            const authorLower = authorUsername.toLowerCase();
+            const textParts = [];
+            let started = false;
+
+            for (const item of items) {
+                const post = item?.post;
+                if (!post) continue;
+                const username = (post.user?.username || '').toLowerCase();
+
+                if (username !== authorLower) {
+                    if (started) break; // rantai utas (self-thread) sudah berakhir
+                    continue;
+                }
+                started = true;
+
+                const captionText = post.caption?.text || '';
+                if (captionText) textParts.push(captionText);
+                if (itemHasShopeeLink(item)) result.hasShopeeLink = true;
+            }
+
+            result.fullText = textParts.join('\n\n').trim();
+        } catch (e) {
+            return null;
+        }
+
+        return result;
+    }
+
+    async function scrapeCurrentTab(delay, opts = {}) {
+        const { shopeeOnly = false, dateCutoff = null } = opts;
         let noNewCount = 0;
         let scrollCount = 0;
+        const oldSeenCodes = new Set();
 
         while (!shouldStop) {
             scrollCount++;
@@ -605,21 +730,50 @@
             const posts = extractPostsFromDOM();
             for (const p of posts) {
                 if (!p.code) continue;
+
+                // Batas waktu: catat kalau post ini lebih tua dari cutoff
+                if (dateCutoff && p.time) {
+                    const t = new Date(p.time);
+                    if (!isNaN(t.getTime()) && t < dateCutoff) {
+                        oldSeenCodes.add(p.code);
+                    }
+                }
+
+                // Filter Shopee affiliate: cek utas utuh, bukan cuma teks yang terlihat di DOM
+                if (shopeeOnly) {
+                    if (checkedShopeeCodes.has(p.code)) {
+                        if (!collectedPosts.has(p.code)) continue; // sudah pernah dicek & ditolak
+                    } else {
+                        checkedShopeeCodes.add(p.code);
+                        const info = await fetchFullThreadInfo(p.url, p.username);
+                        await sleep(300 + Math.random() * 300);
+                        if (!info || !info.hasShopeeLink) continue;
+                        if (info.fullText) p.text = info.fullText;
+                        p.has_shopee_link = true;
+                    }
+                }
+
                 const existing = collectedPosts.get(p.code);
                 if (!existing) {
                     collectedPosts.set(p.code, p);
                 } else {
-                    if (p.text && !existing.text) existing.text = p.text;
+                    if (p.text && (!existing.text || p.text.length > existing.text.length)) existing.text = p.text;
                     if (p.like_count && !existing.like_count) existing.like_count = p.like_count;
                     if (p.time && !existing.time) existing.time = p.time;
                     if (p.images.length && !existing.images.length) existing.images = p.images;
                     if (p.has_video && !existing.has_video) existing.has_video = p.has_video;
+                    if (p.has_shopee_link && !existing.has_shopee_link) existing.has_shopee_link = true;
                 }
             }
 
             const newCount = collectedPosts.size - prevCount;
             if (scrollCount % 3 === 0 || newCount > 0) {
                 log(`#${scrollCount} +${newCount} → ${collectedPosts.size}`);
+            }
+
+            if (dateCutoff && oldSeenCodes.size >= 3) {
+                log(`📅 Sudah lewat batas waktu, berhenti scrape (${collectedPosts.size} posts)`);
+                break;
             }
 
             const grew = await scrollAndWait(delay);
@@ -631,6 +785,7 @@
                     const final = extractPostsFromDOM();
                     for (const p of final) {
                         if (!p.code) continue;
+                        if (shopeeOnly && !collectedPosts.has(p.code)) continue;
                         const ex = collectedPosts.get(p.code);
                         if (!ex) collectedPosts.set(p.code, p);
                         else { if (p.text && !ex.text) ex.text = p.text; }
@@ -860,6 +1015,7 @@
             url: window.location.href,
             total: posts.length,
             total_with_text: posts.filter(p => p.text).length,
+            total_with_shopee_link: posts.filter(p => p.has_shopee_link).length,
             total_conversations: totalComments,
             scraped_at: new Date().toISOString(),
             posts,
@@ -887,7 +1043,7 @@
         const username = pathMatch ? pathMatch[1] : 'unknown';
 
         // CSV header
-        const headers = ['code', 'username', 'text', 'time', 'like_count', 'has_video', 'images', 'url'];
+        const headers = ['code', 'username', 'text', 'time', 'like_count', 'has_video', 'has_shopee_link', 'images', 'url'];
         const rows = posts.map(p => [
             p.code,
             p.username,
@@ -895,6 +1051,7 @@
             p.time,
             p.like_count,
             p.has_video,
+            p.has_shopee_link || false,
             p.images.length,
             p.url,
         ]);
@@ -943,6 +1100,9 @@
             }
             if (post.has_video) {
                 md += `🎬 Video\n\n`;
+            }
+            if (post.has_shopee_link) {
+                md += `🛒 Ada link Shopee affiliate\n\n`;
             }
 
             // Likes
