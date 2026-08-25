@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Threads Full Post Scraper (DOM)
 // @namespace    https://threads.com/
-// @version      4.6.1
+// @version      4.6.2
 // @description  Scrape semua post + replies user Threads via DOM parsing. Filter Shopee affiliate, batas/rentang tanggal, pause/resume + auto-save progress. Zero setup, no ad blocker issues.
 // @author       You
 // @match        https://www.threads.net/@*
@@ -32,6 +32,9 @@
         /s\.shopee\.com/i,
         /shp\.ee/i,
         /shope\.ee/i,
+        /spf\.shopee\.co\.id/i, // shortlink affiliate ShopeeFood
+        /spf\.shopee\.com/i,
+        /shopeefood/i,
         /shopee\.co\.id\/[^\s"]*\?[^\s"]*(af_|utm_source=an_|smtt=|pid=)/i,
     ];
 
