@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Threads Full Post Scraper (DOM)
 // @namespace    https://threads.com/
-// @version      4.5.1
+// @version      4.5.2
 // @description  Scrape semua post + replies user Threads via DOM parsing. Filter Shopee affiliate + batas tanggal. Zero setup, no ad blocker issues.
 // @author       You
 // @match        https://www.threads.net/@*
@@ -135,36 +135,11 @@
             cursor: pointer;
         }
 
-        #ts-panel [data-tooltip] {
-            position: relative;
+        #ts-panel [title] {
+            cursor: help;
         }
-        #ts-panel [data-tooltip]::after {
-            content: attr(data-tooltip);
-            position: absolute;
-            bottom: calc(100% + 8px);
-            left: 50%;
-            transform: translateX(-50%);
-            background: #18181b;
-            border: 1px solid #3f3f46;
-            color: #d4d4d8;
-            font-size: 11px;
-            font-weight: 400;
-            line-height: 1.55;
-            padding: 10px 12px;
-            border-radius: 10px;
-            width: 240px;
-            white-space: pre-line;
-            text-align: left;
-            opacity: 0;
-            visibility: hidden;
-            pointer-events: none;
-            transition: opacity 0.15s ease, visibility 0.15s ease;
-            z-index: 100000;
-            box-shadow: 0 12px 28px -6px rgba(0,0,0,0.55);
-        }
-        #ts-panel [data-tooltip]:hover::after {
-            opacity: 1;
-            visibility: visible;
+        #ts-panel .btn[title] {
+            cursor: pointer;
         }
 
         #ts-panel .ts-switch {
@@ -315,17 +290,17 @@
                     <span>Threads Scraper</span>
                     <span class="ts-badge">v4.5</span>
                 </div>
-                <button class="close-btn" id="ts-x">✕</button>
+                <button class="close-btn" id="ts-x" title="Tutup panel ini. Refresh halaman kalau mau munculin lagi.">✕</button>
             </div>
 
             <div class="ts-section">
                 <label class="ts-label">Scroll delay (ms)</label>
-                <input type="number" class="ts-input" id="ts-delay" value="${CONFIG.scrollDelay}" min="500" step="100">
+                <input type="number" class="ts-input" id="ts-delay" value="${CONFIG.scrollDelay}" min="500" step="100" title="Jeda antar scroll saat scraping. Lebih besar = lebih pelan tapi lebih stabil (teks & gambar sempat ke-load penuh). Lebih kecil = lebih cepat tapi risiko ada post yang ke-skip/teksnya kepotong.">
             </div>
 
             <div class="ts-section">
                 <label class="ts-label">Batas waktu</label>
-                <select class="ts-input" id="ts-date-limit">
+                <select class="ts-input" id="ts-date-limit" title="Batasi seberapa jauh scraper mundur ke belakang berdasarkan tanggal post. Begitu ketemu beberapa post berturut-turut yang lebih tua dari batas ini, scraper otomatis berhenti scroll — nggak perlu sampai mentok ke post paling awal akun.">
                     <option value="0">Semua waktu</option>
                     <option value="1">1 bulan terakhir</option>
                     <option value="3">3 bulan terakhir</option>
@@ -334,17 +309,17 @@
                 </select>
             </div>
 
-            <div class="ts-switch" id="ts-switch-replies" data-tooltip="Tab 'Replies' di profil = balasan yang DIBUAT oleh akun ini di thread milik orang lain (bukan balasan yang diterima di post akun ini). Aktifkan cuma kalau kamu butuh riset gaya komentar/interaksi akun ini di thread orang. Buat riset konten dari thread milik akun ini sendiri, biarkan mati.">
+            <div class="ts-switch" id="ts-switch-replies" title="Tab 'Replies' di profil = balasan yang DIBUAT oleh akun ini di thread milik orang lain (bukan balasan yang diterima di post akun ini). Aktifkan cuma kalau butuh riset gaya komentar/interaksi akun ini di thread orang. Buat riset konten dari thread milik akun ini sendiri, biarkan mati (default).">
                 <span class="ts-switch-label">Include replies tab</span>
                 <div class="ts-toggle" id="ts-toggle-replies"></div>
             </div>
 
-            <div class="ts-switch" id="ts-switch-shopee">
+            <div class="ts-switch" id="ts-switch-shopee" title="Kalau aktif, tiap thread yang lolos scroll akan dicek isi lengkapnya (semua segmen utas oleh author yang sama) — cuma yang salah satu bagiannya ada link Shopee affiliate (s.shopee.co.id, shp.ee, dll) yang disimpan, dan teks yang disimpan adalah utas UTUH, bukan cuma bagian yang ada linknya. Lebih lambat karena tiap thread di-fetch satu-satu.">
                 <span class="ts-switch-label">Shopee affiliate only</span>
                 <div class="ts-toggle" id="ts-toggle-shopee"></div>
             </div>
 
-            <div class="ts-switch" id="ts-switch-deep">
+            <div class="ts-switch" id="ts-switch-deep" title="Buka tiap post satu-satu dan scrape balasan/komentarnya juga (bukan cuma caption post-nya). Jauh lebih lambat karena ada request per post. Aktifkan kalau butuh data percakapan/komentar, bukan cuma isi thread-nya.">
                 <span class="ts-switch-label">Deep mode (scrape comments)</span>
                 <div class="ts-toggle" id="ts-toggle-deep"></div>
             </div>
@@ -361,29 +336,23 @@
             </div>
 
             <div class="ts-actions">
-                <button class="btn btn-go" id="ts-go">
+                <button class="btn btn-go" id="ts-go" title="Mulai scrape dari atas profil ini, sesuai pengaturan delay/batas waktu/toggle di atas.">
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg>
                     Start Scraping
                 </button>
-                <button class="btn btn-stop" id="ts-stop" disabled>
+                <button class="btn btn-stop" id="ts-stop" disabled title="Hentikan proses scrape yang sedang berjalan. Data yang sudah kekumpul tetap bisa didownload — nggak hilang.">
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
                     Stop
                 </button>
-                <button class="btn btn-dl" id="ts-dl" disabled data-tooltip="Data terstruktur (array objek) lengkap dengan semua field: text, time, like_count, images, has_shopee_link, dst. Cocok buat diolah lagi pakai kode/script, atau di-upload sebagai referensi mentah ke Claude project/knowledge base.
-
-Contoh: { &quot;text&quot;: &quot;...&quot;, &quot;like_count&quot;: 342, &quot;time&quot;: &quot;2026-05-01...&quot; }">
+                <button class="btn btn-dl" id="ts-dl" disabled title="Data terstruktur (array objek) lengkap dengan semua field: text, time, like_count, images, has_shopee_link, dst. Cocok diolah lagi pakai kode/script, atau diupload sebagai referensi mentah ke Claude project/knowledge base.&#10;&#10;Contoh: { 'text': '...', 'like_count': 342, 'time': '2026-05-01...' }">
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
                     JSON
                 </button>
-                <button class="btn btn-csv" id="ts-csv" disabled data-tooltip="Format tabel (kolom: code, username, text, time, like_count, dst). Cocok dibuka di Excel/Google Sheets buat sortir & filter cepat — misal urutkan by like_count buat cari thread paling engaging.
-
-Kurang cocok buat baca teks utas panjang (kepotong per baris).">
+                <button class="btn btn-csv" id="ts-csv" disabled title="Format tabel (kolom: code, username, text, time, like_count, dst). Cocok dibuka di Excel/Google Sheets buat sortir & filter cepat — misal urutkan by like_count buat cari thread paling engaging.&#10;&#10;Kurang cocok buat baca teks utas panjang (kepotong per baris).">
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M8 13h2"/><path d="M14 13h2"/><path d="M8 17h2"/><path d="M14 17h2"/></svg>
                     CSV
                 </button>
-                <button class="btn btn-csv" id="ts-md" disabled data-tooltip="Paling enak dibaca — tiap thread jadi satu blok teks lengkap dengan tanggal & like. Paling cocok buat: cari bahan konten, ambil insight, atau dijadiin knowledge base/referensi gaya nulis buat skill Threads Claude (niru gaya atau dimodif).
-
-Contoh: ## 1 Mei 2026 \\n\\n (isi utas) \\n\\n ❤️ 342 likes">
+                <button class="btn btn-csv" id="ts-md" disabled title="Paling enak dibaca — tiap thread jadi satu blok teks lengkap dengan tanggal & like. Paling cocok buat: cari bahan konten, ambil insight, atau dijadiin knowledge base/referensi gaya nulis buat skill Threads Claude (niru gaya atau dimodif).&#10;&#10;Contoh: ## 1 Mei 2026 (isi utas...) ❤️ 342 likes">
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>
                     Markdown
                 </button>
@@ -1197,21 +1166,21 @@ Contoh: ## 1 Mei 2026 \\n\\n (isi utas) \\n\\n ❤️ 342 likes">
                     <span>Threads Scraper</span>
                     <span class="ts-badge">post</span>
                 </div>
-                <button class="close-btn" id="ts-x">✕</button>
+                <button class="close-btn" id="ts-x" title="Tutup panel ini. Refresh halaman kalau mau munculin lagi.">✕</button>
             </div>
 
             <p style="color:#a1a1aa; margin:0 0 14px; font-size:12px; line-height:1.5;">
                 Scrape all comments from this single post — answered or not.
             </p>
 
-            <div class="ts-switch" id="ts-switch-replies">
+            <div class="ts-switch" id="ts-switch-replies" title="Fetch balasan bertingkat (reply dari reply) untuk tiap komentar di post ini. Nambah waktu scraping cukup signifikan karena ada request per komentar yang punya balasan.">
                 <span class="ts-switch-label">Ambil balasan (nested)</span>
                 <div class="ts-toggle" id="ts-toggle-nested"></div>
             </div>
 
             <div class="ts-section" id="ts-threshold-section" style="display:none;">
                 <label class="ts-label">Minimal balasan (skip jika kurang)</label>
-                <input type="number" class="ts-input" id="ts-reply-threshold" value="1" min="1" step="1">
+                <input type="number" class="ts-input" id="ts-reply-threshold" value="1" min="1" step="1" title="Komentar yang jumlah balasannya di bawah angka ini nggak akan di-fetch nested reply-nya. Naikkan angka ini buat hemat waktu, fokus cuma ke komentar yang ramai dibalas.">
             </div>
 
             <div class="ts-stats" id="ts-stats" style="display:none;">
@@ -1226,19 +1195,19 @@ Contoh: ## 1 Mei 2026 \\n\\n (isi utas) \\n\\n ❤️ 342 likes">
             </div>
 
             <div class="ts-actions">
-                <button class="btn btn-go" id="ts-go-single">
+                <button class="btn btn-go" id="ts-go-single" title="Scrape semua komentar di post ini — dari data JSON halaman + scroll DOM buat nangkep komentar tambahan yang ke-load belakangan.">
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
                     Scrape All Comments
                 </button>
-                <button class="btn btn-stop" id="ts-stop-single" disabled>
+                <button class="btn btn-stop" id="ts-stop-single" disabled title="Hentikan proses scrape yang sedang berjalan. Data yang sudah kekumpul tetap bisa didownload.">
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
                     Stop
                 </button>
-                <button class="btn btn-dl" id="ts-dl" disabled>
+                <button class="btn btn-dl" id="ts-dl" disabled title="Data terstruktur (post asli + array komentar, lengkap dengan reply bertingkat kalau diaktifkan). Cocok diolah lagi pakai kode/script, atau diupload sebagai referensi mentah ke Claude project.">
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
                     JSON
                 </button>
-                <button class="btn btn-csv" id="ts-md" disabled>
+                <button class="btn btn-csv" id="ts-md" disabled title="Paling enak dibaca — post asli lalu tiap komentar (dan reply-nya) sebagai blok teks. Cocok buat baca cepat cari insight dari diskusi di kolom komentar, atau dijadiin referensi.">
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>
                     Markdown
                 </button>
