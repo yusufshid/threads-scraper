@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Threads Full Post Scraper (DOM)
 // @namespace    https://threads.com/
-// @version      4.6.0
+// @version      4.6.1
 // @description  Scrape semua post + replies user Threads via DOM parsing. Filter Shopee affiliate, batas/rentang tanggal, pause/resume + auto-save progress. Zero setup, no ad blocker issues.
 // @author       You
 // @match        https://www.threads.net/@*
@@ -482,24 +482,30 @@
         }
     }
 
-    // ==================== AUTO-PAUSE (tab disembunyikan / layar mati) ====================
-    // Timer browser di-throttle habis-habisan pas tab hidden/layar mati, jadi daripada
-    // scraping jalan setengah-setengah dan error, kita jeda sendiri secara eksplisit,
-    // lalu lanjut otomatis begitu tab aktif lagi.
+    // ==================== AUTO-PAUSE (cuma buat Pause manual) ====================
+    // PENTING: dulu ini juga ikut jeda pas document.hidden (tab pindah/nggak fokus),
+    // tapi itu keliru — Chrome cuma MEMPERLAMBAT timer di tab background (di-throttle),
+    // bukan mematikannya. Kalau kita ikut jeda paksa di atasnya, hasilnya malah kelihatan
+    // "berhenti total" padahal browser-nya sendiri masih bisa jalan (cuma pelan). Wake Lock
+    // di bawah ini udah nanganin kasus layar beneran mati; biarkan tab background tetap
+    // jalan (walau lambat) daripada di-hard-stop sama kita sendiri.
     async function waitWhilePausedOrHidden() {
-        if (!document.hidden && !isPaused) return;
-        if (document.hidden) setStatus('⏸ Dijeda otomatis (tab/layar nggak aktif)', 'paused');
-        while ((document.hidden || isPaused) && !shouldStop) {
+        if (!isPaused) return;
+        while (isPaused && !shouldStop) {
             await sleep(800);
         }
-        if (!shouldStop && isRunning) {
-            setStatus(isPaused ? '⏸ Dijeda manual — klik Lanjutkan buat terusin' : '🟢 Sedang scraping...', isPaused ? 'paused' : 'running');
-            if (!isPaused) await acquireWakeLock();
+        if (!shouldStop && isRunning && !isPaused) {
+            setStatus('🟢 Sedang scraping...', 'running');
+            await acquireWakeLock();
         }
     }
 
     document.addEventListener('visibilitychange', () => {
-        if (!document.hidden && isRunning && !isPaused) {
+        if (!isRunning || isPaused) return;
+        if (document.hidden) {
+            setStatus('🟡 Tetap jalan di background — mungkin lebih lambat (tab nggak aktif)', 'running');
+        } else {
+            setStatus('🟢 Sedang scraping...', 'running');
             acquireWakeLock();
         }
     });
