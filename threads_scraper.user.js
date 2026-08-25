@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Threads Full Post Scraper (DOM)
 // @namespace    https://threads.com/
-// @version      4.5.2
+// @version      4.5.3
 // @description  Scrape semua post + replies user Threads via DOM parsing. Filter Shopee affiliate + batas tanggal. Zero setup, no ad blocker issues.
 // @author       You
 // @match        https://www.threads.net/@*
@@ -197,7 +197,13 @@
             margin-bottom: 14px;
         }
 
+        #ts-panel .ts-btn-wrap {
+            position: relative;
+            width: 100%;
+        }
+
         #ts-panel .btn {
+            position: relative;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -212,6 +218,58 @@
             cursor: pointer;
             transition: all 0.15s ease;
             outline: none;
+        }
+
+        #ts-panel .ts-info {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 15px;
+            height: 15px;
+            margin-left: 6px;
+            border-radius: 50%;
+            background: #27272a;
+            border: 1px solid #3f3f46;
+            color: #a1a1aa;
+            font-size: 10px;
+            font-style: italic;
+            font-weight: 700;
+            font-family: Georgia, 'Times New Roman', serif;
+            cursor: pointer;
+            flex-shrink: 0;
+            vertical-align: middle;
+            user-select: none;
+            line-height: 1;
+        }
+        #ts-panel .ts-info:hover, #ts-panel .ts-info:active {
+            background: #3f3f46;
+            color: #fafafa;
+        }
+        #ts-panel .ts-info.ts-info-abs {
+            position: absolute;
+            top: -6px;
+            right: -6px;
+            margin-left: 0;
+            background: #3f3f46;
+            color: #fafafa;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.45);
+        }
+
+        #ts-tip {
+            position: fixed;
+            max-width: 260px;
+            background: #18181b;
+            border: 1px solid #3f3f46;
+            color: #e4e4e7;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            font-size: 11px;
+            line-height: 1.55;
+            padding: 10px 12px;
+            border-radius: 10px;
+            box-shadow: 0 12px 28px -6px rgba(0,0,0,0.6);
+            z-index: 2147483647;
+            display: none;
+            white-space: pre-line;
         }
         #ts-panel .btn:hover:not(:disabled) { transform: translateY(-1px); }
         #ts-panel .btn:active:not(:disabled) { transform: translateY(0); }
@@ -279,6 +337,78 @@
     let collectedPosts = new Map();
     let checkedShopeeCodes = new Set();
 
+    // ==================== TOOLTIP (tap-friendly, works on mobile) ====================
+    // Native `title` attributes don't show on touch devices (no hover state), so
+    // every control gets a small "i" badge instead — tap it to show/hide a real
+    // floating tooltip. Hovering the badge on desktop still works too.
+    let tipEl = null;
+
+    function getTipEl() {
+        if (!tipEl) {
+            tipEl = document.createElement('div');
+            tipEl.id = 'ts-tip';
+            document.body.appendChild(tipEl);
+        }
+        return tipEl;
+    }
+
+    function showTip(anchorEl, text) {
+        const tip = getTipEl();
+        tip.textContent = text;
+        tip.style.display = 'block';
+        tip.style.left = '0px';
+        tip.style.top = '0px';
+        const rect = anchorEl.getBoundingClientRect();
+        const tw = tip.offsetWidth;
+        const th = tip.offsetHeight;
+        let left = rect.left + rect.width / 2 - tw / 2;
+        left = Math.max(8, Math.min(left, window.innerWidth - tw - 8));
+        let top = rect.top - th - 10;
+        if (top < 8) top = rect.bottom + 10;
+        tip.style.left = `${left}px`;
+        tip.style.top = `${top}px`;
+        tip._owner = anchorEl;
+    }
+
+    function hideTip() {
+        if (tipEl) { tipEl.style.display = 'none'; tipEl._owner = null; }
+    }
+
+    // Attaches a small tappable "i" badge to `labelEl` that shows the `title`
+    // text read off `sourceEl` (and strips the native title so it can't also
+    // pop up its own tooltip on desktop).
+    function wireInfoIcon(labelEl, sourceEl, opts = {}) {
+        if (!labelEl || !sourceEl) return;
+        const text = sourceEl.getAttribute('title');
+        if (!text) return;
+        sourceEl.removeAttribute('title');
+
+        const icon = document.createElement('span');
+        icon.className = 'ts-info' + (opts.abs ? ' ts-info-abs' : '');
+        icon.textContent = 'i';
+        icon.setAttribute('role', 'button');
+        icon.setAttribute('aria-label', 'info');
+        labelEl.appendChild(icon);
+
+        icon.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (tipEl && tipEl.style.display === 'block' && tipEl._owner === icon) {
+                hideTip();
+            } else {
+                showTip(icon, text);
+            }
+        });
+        icon.addEventListener('mouseenter', () => showTip(icon, text));
+        icon.addEventListener('mouseleave', hideTip);
+    }
+
+    document.addEventListener('click', (e) => {
+        if (tipEl && tipEl.style.display === 'block' && !e.target.closest('.ts-info') && !e.target.closest('#ts-tip')) {
+            hideTip();
+        }
+    });
+
     // ==================== UI ====================
     function createPanel() {
         if (document.getElementById('ts-panel')) return;
@@ -336,26 +466,36 @@
             </div>
 
             <div class="ts-actions">
-                <button class="btn btn-go" id="ts-go" title="Mulai scrape dari atas profil ini, sesuai pengaturan delay/batas waktu/toggle di atas.">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg>
-                    Start Scraping
-                </button>
-                <button class="btn btn-stop" id="ts-stop" disabled title="Hentikan proses scrape yang sedang berjalan. Data yang sudah kekumpul tetap bisa didownload — nggak hilang.">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
-                    Stop
-                </button>
-                <button class="btn btn-dl" id="ts-dl" disabled title="Data terstruktur (array objek) lengkap dengan semua field: text, time, like_count, images, has_shopee_link, dst. Cocok diolah lagi pakai kode/script, atau diupload sebagai referensi mentah ke Claude project/knowledge base.&#10;&#10;Contoh: { 'text': '...', 'like_count': 342, 'time': '2026-05-01...' }">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
-                    JSON
-                </button>
-                <button class="btn btn-csv" id="ts-csv" disabled title="Format tabel (kolom: code, username, text, time, like_count, dst). Cocok dibuka di Excel/Google Sheets buat sortir & filter cepat — misal urutkan by like_count buat cari thread paling engaging.&#10;&#10;Kurang cocok buat baca teks utas panjang (kepotong per baris).">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M8 13h2"/><path d="M14 13h2"/><path d="M8 17h2"/><path d="M14 17h2"/></svg>
-                    CSV
-                </button>
-                <button class="btn btn-csv" id="ts-md" disabled title="Paling enak dibaca — tiap thread jadi satu blok teks lengkap dengan tanggal & like. Paling cocok buat: cari bahan konten, ambil insight, atau dijadiin knowledge base/referensi gaya nulis buat skill Threads Claude (niru gaya atau dimodif).&#10;&#10;Contoh: ## 1 Mei 2026 (isi utas...) ❤️ 342 likes">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>
-                    Markdown
-                </button>
+                <div class="ts-btn-wrap">
+                    <button class="btn btn-go" id="ts-go" title="Mulai scrape dari atas profil ini, sesuai pengaturan delay/batas waktu/toggle di atas.">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg>
+                        Start Scraping
+                    </button>
+                </div>
+                <div class="ts-btn-wrap">
+                    <button class="btn btn-stop" id="ts-stop" disabled title="Hentikan proses scrape yang sedang berjalan. Data yang sudah kekumpul tetap bisa didownload — nggak hilang.">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+                        Stop
+                    </button>
+                </div>
+                <div class="ts-btn-wrap">
+                    <button class="btn btn-dl" id="ts-dl" disabled title="Data terstruktur (array objek) lengkap dengan semua field: text, time, like_count, images, has_shopee_link, dst. Cocok diolah lagi pakai kode/script, atau diupload sebagai referensi mentah ke Claude project/knowledge base.&#10;&#10;Contoh: { 'text': '...', 'like_count': 342, 'time': '2026-05-01...' }">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+                        JSON
+                    </button>
+                </div>
+                <div class="ts-btn-wrap">
+                    <button class="btn btn-csv" id="ts-csv" disabled title="Format tabel (kolom: code, username, text, time, like_count, dst). Cocok dibuka di Excel/Google Sheets buat sortir & filter cepat — misal urutkan by like_count buat cari thread paling engaging.&#10;&#10;Kurang cocok buat baca teks utas panjang (kepotong per baris).">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M8 13h2"/><path d="M14 13h2"/><path d="M8 17h2"/><path d="M14 17h2"/></svg>
+                        CSV
+                    </button>
+                </div>
+                <div class="ts-btn-wrap">
+                    <button class="btn btn-csv" id="ts-md" disabled title="Paling enak dibaca — tiap thread jadi satu blok teks lengkap dengan tanggal & like. Paling cocok buat: cari bahan konten, ambil insight, atau dijadiin knowledge base/referensi gaya nulis buat skill Threads Claude (niru gaya atau dimodif).&#10;&#10;Contoh: ## 1 Mei 2026 (isi utas...) ❤️ 342 likes">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>
+                        Markdown
+                    </button>
+                </div>
             </div>
 
             <div class="ts-log" id="ts-log">
@@ -363,6 +503,17 @@
             </div>
         `;
         document.body.appendChild(panel);
+
+        wireInfoIcon(panel.querySelector('#ts-delay').previousElementSibling, panel.querySelector('#ts-delay'));
+        wireInfoIcon(panel.querySelector('#ts-date-limit').previousElementSibling, panel.querySelector('#ts-date-limit'));
+        wireInfoIcon(panel.querySelector('#ts-switch-replies .ts-switch-label'), panel.querySelector('#ts-switch-replies'));
+        wireInfoIcon(panel.querySelector('#ts-switch-shopee .ts-switch-label'), panel.querySelector('#ts-switch-shopee'));
+        wireInfoIcon(panel.querySelector('#ts-switch-deep .ts-switch-label'), panel.querySelector('#ts-switch-deep'));
+        wireInfoIcon(panel.querySelector('#ts-go').parentElement, panel.querySelector('#ts-go'), { abs: true });
+        wireInfoIcon(panel.querySelector('#ts-stop').parentElement, panel.querySelector('#ts-stop'), { abs: true });
+        wireInfoIcon(panel.querySelector('#ts-dl').parentElement, panel.querySelector('#ts-dl'), { abs: true });
+        wireInfoIcon(panel.querySelector('#ts-csv').parentElement, panel.querySelector('#ts-csv'), { abs: true });
+        wireInfoIcon(panel.querySelector('#ts-md').parentElement, panel.querySelector('#ts-md'), { abs: true });
 
         document.getElementById('ts-x').onclick = () => panel.remove();
         document.getElementById('ts-go').onclick = startScraping;
@@ -1195,22 +1346,30 @@
             </div>
 
             <div class="ts-actions">
-                <button class="btn btn-go" id="ts-go-single" title="Scrape semua komentar di post ini — dari data JSON halaman + scroll DOM buat nangkep komentar tambahan yang ke-load belakangan.">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-                    Scrape All Comments
-                </button>
-                <button class="btn btn-stop" id="ts-stop-single" disabled title="Hentikan proses scrape yang sedang berjalan. Data yang sudah kekumpul tetap bisa didownload.">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
-                    Stop
-                </button>
-                <button class="btn btn-dl" id="ts-dl" disabled title="Data terstruktur (post asli + array komentar, lengkap dengan reply bertingkat kalau diaktifkan). Cocok diolah lagi pakai kode/script, atau diupload sebagai referensi mentah ke Claude project.">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
-                    JSON
-                </button>
-                <button class="btn btn-csv" id="ts-md" disabled title="Paling enak dibaca — post asli lalu tiap komentar (dan reply-nya) sebagai blok teks. Cocok buat baca cepat cari insight dari diskusi di kolom komentar, atau dijadiin referensi.">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>
-                    Markdown
-                </button>
+                <div class="ts-btn-wrap">
+                    <button class="btn btn-go" id="ts-go-single" title="Scrape semua komentar di post ini — dari data JSON halaman + scroll DOM buat nangkep komentar tambahan yang ke-load belakangan.">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                        Scrape All Comments
+                    </button>
+                </div>
+                <div class="ts-btn-wrap">
+                    <button class="btn btn-stop" id="ts-stop-single" disabled title="Hentikan proses scrape yang sedang berjalan. Data yang sudah kekumpul tetap bisa didownload.">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+                        Stop
+                    </button>
+                </div>
+                <div class="ts-btn-wrap">
+                    <button class="btn btn-dl" id="ts-dl" disabled title="Data terstruktur (post asli + array komentar, lengkap dengan reply bertingkat kalau diaktifkan). Cocok diolah lagi pakai kode/script, atau diupload sebagai referensi mentah ke Claude project.">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+                        JSON
+                    </button>
+                </div>
+                <div class="ts-btn-wrap">
+                    <button class="btn btn-csv" id="ts-md" disabled title="Paling enak dibaca — post asli lalu tiap komentar (dan reply-nya) sebagai blok teks. Cocok buat baca cepat cari insight dari diskusi di kolom komentar, atau dijadiin referensi.">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>
+                        Markdown
+                    </button>
+                </div>
             </div>
 
             <div class="ts-log" id="ts-log">
@@ -1218,6 +1377,13 @@
             </div>
         `;
         document.body.appendChild(panel);
+
+        wireInfoIcon(panel.querySelector('#ts-switch-replies .ts-switch-label'), panel.querySelector('#ts-switch-replies'));
+        wireInfoIcon(panel.querySelector('#ts-reply-threshold').previousElementSibling, panel.querySelector('#ts-reply-threshold'));
+        wireInfoIcon(panel.querySelector('#ts-go-single').parentElement, panel.querySelector('#ts-go-single'), { abs: true });
+        wireInfoIcon(panel.querySelector('#ts-stop-single').parentElement, panel.querySelector('#ts-stop-single'), { abs: true });
+        wireInfoIcon(panel.querySelector('#ts-dl').parentElement, panel.querySelector('#ts-dl'), { abs: true });
+        wireInfoIcon(panel.querySelector('#ts-md').parentElement, panel.querySelector('#ts-md'), { abs: true });
 
         document.getElementById('ts-x').onclick = () => panel.remove();
         document.getElementById('ts-go-single').onclick = scrapeSinglePost;
