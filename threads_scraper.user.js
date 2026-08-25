@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Threads Full Post Scraper (DOM)
 // @namespace    https://threads.com/
-// @version      4.5.0
+// @version      4.5.1
 // @description  Scrape semua post + replies user Threads via DOM parsing. Filter Shopee affiliate + batas tanggal. Zero setup, no ad blocker issues.
 // @author       You
 // @match        https://www.threads.net/@*
@@ -133,6 +133,38 @@
         }
         #ts-panel select.ts-input {
             cursor: pointer;
+        }
+
+        #ts-panel [data-tooltip] {
+            position: relative;
+        }
+        #ts-panel [data-tooltip]::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            bottom: calc(100% + 8px);
+            left: 50%;
+            transform: translateX(-50%);
+            background: #18181b;
+            border: 1px solid #3f3f46;
+            color: #d4d4d8;
+            font-size: 11px;
+            font-weight: 400;
+            line-height: 1.55;
+            padding: 10px 12px;
+            border-radius: 10px;
+            width: 240px;
+            white-space: pre-line;
+            text-align: left;
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+            transition: opacity 0.15s ease, visibility 0.15s ease;
+            z-index: 100000;
+            box-shadow: 0 12px 28px -6px rgba(0,0,0,0.55);
+        }
+        #ts-panel [data-tooltip]:hover::after {
+            opacity: 1;
+            visibility: visible;
         }
 
         #ts-panel .ts-switch {
@@ -297,14 +329,14 @@
                     <option value="0">Semua waktu</option>
                     <option value="1">1 bulan terakhir</option>
                     <option value="3">3 bulan terakhir</option>
-                    <option value="6">6 bulan terakhir</option>
+                    <option value="6" selected>6 bulan terakhir</option>
                     <option value="12">12 bulan terakhir</option>
                 </select>
             </div>
 
-            <div class="ts-switch" id="ts-switch-replies">
+            <div class="ts-switch" id="ts-switch-replies" data-tooltip="Tab 'Replies' di profil = balasan yang DIBUAT oleh akun ini di thread milik orang lain (bukan balasan yang diterima di post akun ini). Aktifkan cuma kalau kamu butuh riset gaya komentar/interaksi akun ini di thread orang. Buat riset konten dari thread milik akun ini sendiri, biarkan mati.">
                 <span class="ts-switch-label">Include replies tab</span>
-                <div class="ts-toggle active" id="ts-toggle-replies"></div>
+                <div class="ts-toggle" id="ts-toggle-replies"></div>
             </div>
 
             <div class="ts-switch" id="ts-switch-shopee">
@@ -337,15 +369,21 @@
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
                     Stop
                 </button>
-                <button class="btn btn-dl" id="ts-dl" disabled>
+                <button class="btn btn-dl" id="ts-dl" disabled data-tooltip="Data terstruktur (array objek) lengkap dengan semua field: text, time, like_count, images, has_shopee_link, dst. Cocok buat diolah lagi pakai kode/script, atau di-upload sebagai referensi mentah ke Claude project/knowledge base.
+
+Contoh: { &quot;text&quot;: &quot;...&quot;, &quot;like_count&quot;: 342, &quot;time&quot;: &quot;2026-05-01...&quot; }">
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
                     JSON
                 </button>
-                <button class="btn btn-csv" id="ts-csv" disabled>
+                <button class="btn btn-csv" id="ts-csv" disabled data-tooltip="Format tabel (kolom: code, username, text, time, like_count, dst). Cocok dibuka di Excel/Google Sheets buat sortir & filter cepat — misal urutkan by like_count buat cari thread paling engaging.
+
+Kurang cocok buat baca teks utas panjang (kepotong per baris).">
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M8 13h2"/><path d="M14 13h2"/><path d="M8 17h2"/><path d="M14 17h2"/></svg>
                     CSV
                 </button>
-                <button class="btn btn-csv" id="ts-md" disabled>
+                <button class="btn btn-csv" id="ts-md" disabled data-tooltip="Paling enak dibaca — tiap thread jadi satu blok teks lengkap dengan tanggal & like. Paling cocok buat: cari bahan konten, ambil insight, atau dijadiin knowledge base/referensi gaya nulis buat skill Threads Claude (niru gaya atau dimodif).
+
+Contoh: ## 1 Mei 2026 \\n\\n (isi utas) \\n\\n ❤️ 342 likes">
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>
                     Markdown
                 </button>
