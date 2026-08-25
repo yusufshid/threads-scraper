@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Threads Full Post Scraper (DOM)
 // @namespace    https://threads.com/
-// @version      4.5.3
-// @description  Scrape semua post + replies user Threads via DOM parsing. Filter Shopee affiliate + batas tanggal. Zero setup, no ad blocker issues.
+// @version      4.6.0
+// @description  Scrape semua post + replies user Threads via DOM parsing. Filter Shopee affiliate, batas/rentang tanggal, pause/resume + auto-save progress. Zero setup, no ad blocker issues.
 // @author       You
 // @match        https://www.threads.net/@*
 // @match        https://www.threads.com/@*
@@ -10,6 +10,9 @@
 // @match        https://threads.com/@*
 // @icon         https://www.threads.net/favicon.ico
 // @grant        GM_addStyle
+// @grant        GM_setValue
+// @grant        GM_getValue
+// @grant        GM_deleteValue
 // @run-at       document-idle
 // ==/UserScript==
 
@@ -287,6 +290,42 @@
         #ts-panel .btn-csv { background: #18181b; color: #fafafa; border: 1px solid #27272a; }
         #ts-panel .btn-csv:hover:not(:disabled) { background: #27272a; border-color: #3f3f46; }
 
+        #ts-panel .btn-pause { background: #18181b; color: #fbbf24; border: 1px solid #78350f; }
+        #ts-panel .btn-pause:hover:not(:disabled) { background: #27180a; border-color: #92400e; }
+
+        #ts-panel .ts-status {
+            display: flex;
+            align-items: center;
+            padding: 9px 12px;
+            background: #18181b;
+            border: 1px solid #27272a;
+            border-radius: 10px;
+            font-size: 12px;
+            font-weight: 500;
+            color: #a1a1aa;
+            margin-bottom: 14px;
+            line-height: 1.4;
+        }
+        #ts-panel .ts-status.running { border-color: #3f3f46; color: #fafafa; }
+        #ts-panel .ts-status.paused { border-color: #78350f; color: #fbbf24; }
+        #ts-panel .ts-status.done { border-color: #14532d; color: #4ade80; }
+        #ts-panel .ts-status.stopped { border-color: #7f1d1d; color: #f87171; }
+
+        #ts-panel .ts-fresh-link {
+            display: block;
+            width: 100%;
+            text-align: center;
+            background: transparent;
+            border: none;
+            color: #71717a;
+            font-size: 11px;
+            text-decoration: underline;
+            cursor: pointer;
+            padding: 2px 0 4px;
+            font-family: inherit;
+        }
+        #ts-panel .ts-fresh-link:hover { color: #a1a1aa; }
+
         #ts-panel .ts-stats {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -334,8 +373,180 @@
     // ==================== STATE ====================
     let isRunning = false;
     let shouldStop = false;
+    let isPaused = false;
     let collectedPosts = new Map();
     let checkedShopeeCodes = new Set();
+    let wakeLockHandle = null;
+    let currentUsername = '';
+    let currentSettingsSignature = '';
+
+    // ==================== PERSISTENCE (resume after screen-off / tab-kill) ====================
+    function getProfileUsername() {
+        const m = window.location.pathname.match(/^\/@([^/]+)/);
+        return m ? m[1] : '';
+    }
+
+    function getStorageKey(username) {
+        return `ts_progress_${window.location.hostname}_${username}`;
+    }
+
+    function saveProgress(username, settingsSignature) {
+        if (!username) return;
+        try {
+            const payload = {
+                username,
+                settingsSignature,
+                posts: Array.from(collectedPosts.values()),
+                savedAt: Date.now(),
+            };
+            GM_setValue(getStorageKey(username), JSON.stringify(payload));
+        } catch (e) {}
+    }
+
+    function loadProgress(username) {
+        if (!username) return null;
+        try {
+            const raw = GM_getValue(getStorageKey(username), null);
+            if (!raw) return null;
+            return JSON.parse(raw);
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function clearProgress(username) {
+        if (!username) return;
+        try { GM_deleteValue(getStorageKey(username)); } catch (e) {}
+    }
+
+    // Kalau ada progress tersisa dari sesi sebelumnya (layar mati / tab ke-kill / ditutup pas Stop),
+    // ubah tombol Start jadi "Lanjutkan" dan kasih opsi buang progress lama & mulai dari 0.
+    function checkResumableSession() {
+        const username = getProfileUsername();
+        if (!username) return;
+        const saved = loadProgress(username);
+        const goBtn = document.getElementById('ts-go');
+        if (!goBtn) return;
+
+        const existingFreshLink = document.querySelector('.ts-fresh-link');
+        if (existingFreshLink) existingFreshLink.remove();
+
+        if (!saved || !saved.posts || saved.posts.length === 0) {
+            goBtn.dataset.resume = '';
+            goBtn.querySelector('.ts-go-label') && (goBtn.querySelector('.ts-go-label').textContent = 'Start Scraping');
+            return;
+        }
+
+        const savedCount = saved.posts.length;
+        const savedDate = new Date(saved.savedAt).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' });
+        log(`📦 Ditemukan progress tersimpan: ${savedCount} posts (disimpan ${savedDate}). Klik "Lanjutkan" buat terusin dari situ, atau buang progress lama kalau mau mulai dari 0.`);
+
+        goBtn.dataset.resume = '1';
+        const label = goBtn.querySelector('.ts-go-label');
+        if (label) label.textContent = `Lanjutkan (${savedCount} posts)`;
+
+        const freshBtn = document.createElement('button');
+        freshBtn.type = 'button';
+        freshBtn.className = 'ts-fresh-link';
+        freshBtn.textContent = 'Mulai dari awal (hapus progress lama)';
+        freshBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            clearProgress(username);
+            goBtn.dataset.resume = '';
+            if (label) label.textContent = 'Start Scraping';
+            freshBtn.remove();
+            log('🗑️ Progress lama dihapus. Siap mulai dari awal.');
+        });
+        goBtn.parentElement.after(freshBtn);
+    }
+
+    // ==================== WAKE LOCK (cegah layar mati saat scraping) ====================
+    async function acquireWakeLock() {
+        if (!('wakeLock' in navigator)) {
+            log('⚠️ Wake Lock nggak didukung browser ini — layar bisa mati sendiri kalau nggak disentuh.');
+            return;
+        }
+        try {
+            wakeLockHandle = await navigator.wakeLock.request('screen');
+            wakeLockHandle.addEventListener('release', () => { wakeLockHandle = null; });
+        } catch (e) {
+            // biasanya gagal karena tab lagi hidden — nggak fatal, auto-pause bakal nangkep
+        }
+    }
+
+    function releaseWakeLock() {
+        if (wakeLockHandle) {
+            wakeLockHandle.release().catch(() => {});
+            wakeLockHandle = null;
+        }
+    }
+
+    // ==================== AUTO-PAUSE (tab disembunyikan / layar mati) ====================
+    // Timer browser di-throttle habis-habisan pas tab hidden/layar mati, jadi daripada
+    // scraping jalan setengah-setengah dan error, kita jeda sendiri secara eksplisit,
+    // lalu lanjut otomatis begitu tab aktif lagi.
+    async function waitWhilePausedOrHidden() {
+        if (!document.hidden && !isPaused) return;
+        if (document.hidden) setStatus('⏸ Dijeda otomatis (tab/layar nggak aktif)', 'paused');
+        while ((document.hidden || isPaused) && !shouldStop) {
+            await sleep(800);
+        }
+        if (!shouldStop && isRunning) {
+            setStatus(isPaused ? '⏸ Dijeda manual — klik Lanjutkan buat terusin' : '🟢 Sedang scraping...', isPaused ? 'paused' : 'running');
+            if (!isPaused) await acquireWakeLock();
+        }
+    }
+
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden && isRunning && !isPaused) {
+            acquireWakeLock();
+        }
+    });
+
+    // ==================== STATUS BADGE ====================
+    function setStatus(text, variant = 'idle') {
+        const el = document.getElementById('ts-status');
+        if (!el) return;
+        el.textContent = text;
+        el.className = 'ts-status' + (variant ? ' ' + variant : '');
+    }
+
+    function setPauseLabel(paused) {
+        const btn = document.getElementById('ts-pause');
+        if (!btn) return;
+        btn.innerHTML = paused
+            ? `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>Lanjutkan`
+            : `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>Pause`;
+    }
+
+    // ==================== TANGGAL: preset bulan ATAU rentang custom ====================
+    function getDateCutoff(months) {
+        const d = new Date();
+        d.setMonth(d.getMonth() - months);
+        return d;
+    }
+
+    function getDateRangeSettings() {
+        const preset = document.getElementById('ts-date-limit').value;
+
+        if (preset === 'custom') {
+            const fromVal = document.getElementById('ts-date-from').value;
+            const toVal = document.getElementById('ts-date-to').value;
+            const dateFrom = fromVal ? new Date(`${fromVal}T00:00:00`) : null;
+            const dateTo = toVal ? new Date(`${toVal}T23:59:59`) : null;
+            if (!dateFrom && !dateTo) return { dateFrom: null, dateTo: null, dateLabel: null };
+            const fromLabel = fromVal ? new Date(fromVal).toLocaleDateString('id-ID') : 'awal akun';
+            const toLabel = toVal ? new Date(toVal).toLocaleDateString('id-ID') : 'sekarang';
+            return { dateFrom, dateTo, dateLabel: `Rentang tanggal: ${fromLabel} – ${toLabel}` };
+        }
+
+        const months = parseInt(preset) || 0;
+        if (months > 0) {
+            return { dateFrom: getDateCutoff(months), dateTo: null, dateLabel: `Batas waktu: ${months} bulan terakhir` };
+        }
+        return { dateFrom: null, dateTo: null, dateLabel: null };
+    }
 
     // ==================== TOOLTIP (tap-friendly, works on mobile) ====================
     // Native `title` attributes don't show on touch devices (no hover state), so
@@ -418,10 +629,12 @@
             <div class="ts-header">
                 <div class="ts-title">
                     <span>Threads Scraper</span>
-                    <span class="ts-badge">v4.5</span>
+                    <span class="ts-badge">v4.6</span>
                 </div>
                 <button class="close-btn" id="ts-x" title="Tutup panel ini. Refresh halaman kalau mau munculin lagi.">✕</button>
             </div>
+
+            <div class="ts-status" id="ts-status">⚪ Siap</div>
 
             <div class="ts-section">
                 <label class="ts-label">Scroll delay (ms)</label>
@@ -436,7 +649,15 @@
                     <option value="3">3 bulan terakhir</option>
                     <option value="6" selected>6 bulan terakhir</option>
                     <option value="12">12 bulan terakhir</option>
+                    <option value="custom">Rentang tanggal custom...</option>
                 </select>
+            </div>
+
+            <div class="ts-section" id="ts-custom-range" style="display:none;">
+                <label class="ts-label">Dari tanggal</label>
+                <input type="date" class="ts-input" id="ts-date-from" title="Post yang lebih lama dari tanggal ini nggak akan disimpan — scraper berhenti begitu mentok di sini. Kosongkan kalau nggak ada batas bawah.">
+                <label class="ts-label" style="margin-top:8px;">Sampai tanggal</label>
+                <input type="date" class="ts-input" id="ts-date-to" title="Post yang lebih baru dari tanggal ini di-skip (tetap discroll lewatin, nggak disimpan) sampai ketemu post yang masuk rentang. Kosongkan kalau mau mulai dari yang paling baru.">
             </div>
 
             <div class="ts-switch" id="ts-switch-replies" title="Tab 'Replies' di profil = balasan yang DIBUAT oleh akun ini di thread milik orang lain (bukan balasan yang diterima di post akun ini). Aktifkan cuma kalau butuh riset gaya komentar/interaksi akun ini di thread orang. Buat riset konten dari thread milik akun ini sendiri, biarkan mati (default).">
@@ -467,13 +688,19 @@
 
             <div class="ts-actions">
                 <div class="ts-btn-wrap">
-                    <button class="btn btn-go" id="ts-go" title="Mulai scrape dari atas profil ini, sesuai pengaturan delay/batas waktu/toggle di atas.">
+                    <button class="btn btn-go" id="ts-go" title="Mulai scrape dari atas profil ini, sesuai pengaturan delay/batas waktu/toggle di atas. Kalau ada progress tersimpan dari sesi sebelumnya, tombol ini otomatis jadi 'Lanjutkan'.">
                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg>
-                        Start Scraping
+                        <span class="ts-go-label">Start Scraping</span>
                     </button>
                 </div>
                 <div class="ts-btn-wrap">
-                    <button class="btn btn-stop" id="ts-stop" disabled title="Hentikan proses scrape yang sedang berjalan. Data yang sudah kekumpul tetap bisa didownload — nggak hilang.">
+                    <button class="btn btn-pause" id="ts-pause" disabled title="Jeda proses scraping tanpa kehilangan progress — nggak scroll/fetch selama dijeda. Klik lagi (jadi 'Lanjutkan') buat terusin dari titik yang sama.">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>
+                        Pause
+                    </button>
+                </div>
+                <div class="ts-btn-wrap">
+                    <button class="btn btn-stop" id="ts-stop" disabled title="Hentikan proses scrape sepenuhnya. Data yang sudah kekumpul tetap tersimpan dan bisa didownload atau dilanjutkan lagi nanti (klik Start jadi 'Lanjutkan').">
                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
                         Stop
                     </button>
@@ -506,10 +733,13 @@
 
         wireInfoIcon(panel.querySelector('#ts-delay').previousElementSibling, panel.querySelector('#ts-delay'));
         wireInfoIcon(panel.querySelector('#ts-date-limit').previousElementSibling, panel.querySelector('#ts-date-limit'));
+        wireInfoIcon(panel.querySelector('#ts-date-from').previousElementSibling, panel.querySelector('#ts-date-from'));
+        wireInfoIcon(panel.querySelector('#ts-date-to').previousElementSibling, panel.querySelector('#ts-date-to'));
         wireInfoIcon(panel.querySelector('#ts-switch-replies .ts-switch-label'), panel.querySelector('#ts-switch-replies'));
         wireInfoIcon(panel.querySelector('#ts-switch-shopee .ts-switch-label'), panel.querySelector('#ts-switch-shopee'));
         wireInfoIcon(panel.querySelector('#ts-switch-deep .ts-switch-label'), panel.querySelector('#ts-switch-deep'));
         wireInfoIcon(panel.querySelector('#ts-go').parentElement, panel.querySelector('#ts-go'), { abs: true });
+        wireInfoIcon(panel.querySelector('#ts-pause').parentElement, panel.querySelector('#ts-pause'), { abs: true });
         wireInfoIcon(panel.querySelector('#ts-stop').parentElement, panel.querySelector('#ts-stop'), { abs: true });
         wireInfoIcon(panel.querySelector('#ts-dl').parentElement, panel.querySelector('#ts-dl'), { abs: true });
         wireInfoIcon(panel.querySelector('#ts-csv').parentElement, panel.querySelector('#ts-csv'), { abs: true });
@@ -517,10 +747,30 @@
 
         document.getElementById('ts-x').onclick = () => panel.remove();
         document.getElementById('ts-go').onclick = startScraping;
-        document.getElementById('ts-stop').onclick = () => { shouldStop = true; };
+        document.getElementById('ts-stop').onclick = () => {
+            shouldStop = true;
+            isPaused = false;
+        };
+        document.getElementById('ts-pause').onclick = () => {
+            if (!isRunning) return;
+            isPaused = !isPaused;
+            setPauseLabel(isPaused);
+            if (isPaused) {
+                setStatus('⏸ Dijeda manual — klik Lanjutkan buat terusin', 'paused');
+                releaseWakeLock();
+                saveProgress(currentUsername, currentSettingsSignature);
+            } else {
+                setStatus('🟢 Sedang scraping...', 'running');
+                acquireWakeLock();
+            }
+        };
         document.getElementById('ts-dl').onclick = downloadJSON;
         document.getElementById('ts-csv').onclick = downloadCSV;
         document.getElementById('ts-md').onclick = downloadMarkdown;
+
+        document.getElementById('ts-date-limit').onchange = (e) => {
+            document.getElementById('ts-custom-range').style.display = e.target.value === 'custom' ? 'block' : 'none';
+        };
 
         const toggle = document.getElementById('ts-toggle-replies');
         document.getElementById('ts-switch-replies').onclick = () => {
@@ -536,6 +786,8 @@
         document.getElementById('ts-switch-shopee').onclick = () => {
             toggleShopee.classList.toggle('active');
         };
+
+        checkResumableSession();
     }
 
     function log(msg) {
@@ -555,14 +807,17 @@
 
     function setBtns(state) {
         const go = document.getElementById('ts-go');
+        const pause = document.getElementById('ts-pause');
         const stop = document.getElementById('ts-stop');
         const dl = document.getElementById('ts-dl');
         const csv = document.getElementById('ts-csv');
         const md = document.getElementById('ts-md');
         if (state === 'run') {
-            go.disabled = true; stop.disabled = false; dl.disabled = true; csv.disabled = true; md.disabled = true;
+            go.disabled = true; pause.disabled = false; stop.disabled = false;
+            dl.disabled = true; csv.disabled = true; md.disabled = true;
         } else {
-            go.disabled = false; stop.disabled = true;
+            go.disabled = false; pause.disabled = true; stop.disabled = true;
+            setPauseLabel(false);
             dl.disabled = collectedPosts.size === 0;
             csv.disabled = collectedPosts.size === 0;
             md.disabled = collectedPosts.size === 0;
@@ -738,28 +993,51 @@
         if (isRunning) return;
         isRunning = true;
         shouldStop = false;
-        collectedPosts.clear();
-        checkedShopeeCodes = new Set();
+        isPaused = false;
         setBtns('run');
+
+        const goBtn = document.getElementById('ts-go');
+        const isResume = goBtn.dataset.resume === '1';
+        const username = getProfileUsername();
+        currentUsername = username;
+
+        const existingFreshLink = document.querySelector('.ts-fresh-link');
+        if (existingFreshLink) existingFreshLink.remove();
+
+        if (isResume) {
+            const saved = loadProgress(username);
+            collectedPosts = new Map();
+            if (saved && saved.posts) {
+                for (const p of saved.posts) collectedPosts.set(p.code, p);
+            }
+            goBtn.dataset.resume = '';
+            log(`▶️ Melanjutkan dari ${collectedPosts.size} posts tersimpan — bakal scroll ulang dari atas dan otomatis skip yang udah kekumpul.`);
+        } else {
+            collectedPosts.clear();
+        }
+        checkedShopeeCodes = new Set();
 
         const delay = parseInt(document.getElementById('ts-delay').value) || CONFIG.scrollDelay;
         const includeReplies = document.getElementById('ts-toggle-replies').classList.contains('active');
         const deepMode = document.getElementById('ts-toggle-deep').classList.contains('active');
         const shopeeOnly = document.getElementById('ts-toggle-shopee').classList.contains('active');
-        const dateLimitMonths = parseInt(document.getElementById('ts-date-limit').value) || 0;
-        const dateCutoff = dateLimitMonths > 0 ? getDateCutoff(dateLimitMonths) : null;
-        const scrapeOpts = { shopeeOnly, dateCutoff };
+        const { dateFrom, dateTo, dateLabel } = getDateRangeSettings();
+        currentSettingsSignature = `${shopeeOnly}|${dateFrom ? dateFrom.toISOString() : ''}|${dateTo ? dateTo.toISOString() : ''}|${includeReplies}`;
+        const scrapeOpts = { shopeeOnly, dateFrom, dateTo, settingsSignature: currentSettingsSignature };
 
         log('🚀 Starting...');
         if (shopeeOnly) log('🛒 Filter: hanya utas dengan link Shopee affiliate');
-        if (dateCutoff) log(`📅 Batas waktu: ${dateLimitMonths} bulan terakhir`);
+        if (dateLabel) log(`📅 ${dateLabel}`);
+
+        setStatus('🟢 Sedang scraping...', 'running');
+        await acquireWakeLock();
 
         window.scrollTo(0, 0);
         await sleep(1000);
 
         // Phase 1: Posts tab
         log('📝 Scraping posts...');
-        await scrapeCurrentTab(delay, scrapeOpts);
+        let reason = await scrapeCurrentTab(delay, scrapeOpts);
 
         // Phase 2: Replies tab
         if (includeReplies && !shouldStop) {
@@ -771,7 +1049,7 @@
                 window.scrollTo(0, 0);
                 await sleep(1000);
                 const before = collectedPosts.size;
-                await scrapeCurrentTab(delay, scrapeOpts);
+                reason = await scrapeCurrentTab(delay, scrapeOpts);
                 log(`💬 Replies: +${collectedPosts.size - before}`);
                 const threadsTab = findThreadsTab();
                 if (threadsTab) threadsTab.click();
@@ -786,8 +1064,9 @@
             await scrapeDeepComments(delay);
         }
 
-        if (shouldStop) log('⏹ Stopped');
+        releaseWakeLock();
         isRunning = false;
+        isPaused = false;
         setBtns('done');
 
         const withText = Array.from(collectedPosts.values()).filter(p => p.text).length;
@@ -797,12 +1076,24 @@
             doneMsg += `, ${withShopee} dengan link Shopee`;
         }
         log(doneMsg);
-    }
 
-    function getDateCutoff(months) {
-        const d = new Date();
-        d.setMonth(d.getMonth() - months);
-        return d;
+        if (shouldStop || reason === 'stopped') {
+            log('⏹ Stopped');
+            saveProgress(username, currentSettingsSignature);
+            setStatus(`⏹ Dihentikan manual — ${collectedPosts.size} posts tersimpan, bisa dilanjutkan kapan saja`, 'stopped');
+        } else {
+            const reasonLabel = {
+                end_of_feed: 'sudah mentok akhir feed',
+                date_limit: dateLabel ? `${dateLabel.toLowerCase()} sudah tercapai` : 'sudah lewat batas waktu',
+                complete: 'selesai',
+            }[reason] || 'selesai';
+            setStatus(`✅ Selesai — ${reasonLabel}`, 'done');
+            clearProgress(username);
+        }
+
+        // Refresh label tombol Start ("Lanjutkan (N)" kalau masih ada progress tersimpan,
+        // atau balik ke "Start Scraping" kalau progress udah kelar/kehapus)
+        checkResumableSession();
     }
 
     // Cek apakah sebuah thread_item (dari JSON halaman Threads) mengandung link Shopee affiliate
@@ -875,12 +1166,16 @@
     }
 
     async function scrapeCurrentTab(delay, opts = {}) {
-        const { shopeeOnly = false, dateCutoff = null } = opts;
+        const { shopeeOnly = false, dateFrom = null, dateTo = null, settingsSignature = '' } = opts;
         let noNewCount = 0;
         let scrollCount = 0;
         const oldSeenCodes = new Set();
+        let reason = 'complete';
 
         while (!shouldStop) {
+            await waitWhilePausedOrHidden();
+            if (shouldStop) { reason = 'stopped'; break; }
+
             scrollCount++;
             const prevCount = collectedPosts.size;
 
@@ -889,12 +1184,19 @@
             for (const p of posts) {
                 if (!p.code) continue;
 
-                // Batas waktu: catat kalau post ini lebih tua dari cutoff
-                if (dateCutoff && p.time) {
+                let postDate = null;
+                if (p.time) {
                     const t = new Date(p.time);
-                    if (!isNaN(t.getTime()) && t < dateCutoff) {
-                        oldSeenCodes.add(p.code);
-                    }
+                    if (!isNaN(t.getTime())) postDate = t;
+                }
+
+                // Rentang tanggal custom: post lebih baru dari batas atas -> lewatin dulu, terus scroll
+                if (dateTo && postDate && postDate > dateTo) continue;
+
+                // Post lebih lama dari batas bawah -> di luar rentang, jangan disimpan, tandai buat berhenti
+                if (dateFrom && postDate && postDate < dateFrom) {
+                    oldSeenCodes.add(p.code);
+                    continue;
                 }
 
                 // Filter Shopee affiliate: cek utas utuh, bukan cuma teks yang terlihat di DOM
@@ -903,6 +1205,8 @@
                         if (!collectedPosts.has(p.code)) continue; // sudah pernah dicek & ditolak
                     } else {
                         checkedShopeeCodes.add(p.code);
+                        await waitWhilePausedOrHidden();
+                        if (shouldStop) { reason = 'stopped'; break; }
                         const info = await fetchFullThreadInfo(p.url, p.username);
                         await sleep(300 + Math.random() * 300);
                         if (!info || !info.hasShopeeLink) continue;
@@ -923,14 +1227,19 @@
                     if (p.has_shopee_link && !existing.has_shopee_link) existing.has_shopee_link = true;
                 }
             }
+            if (shouldStop) { reason = 'stopped'; break; }
 
             const newCount = collectedPosts.size - prevCount;
             if (scrollCount % 3 === 0 || newCount > 0) {
                 log(`#${scrollCount} +${newCount} → ${collectedPosts.size}`);
             }
+            if (newCount > 0) {
+                saveProgress(currentUsername, settingsSignature);
+            }
 
-            if (dateCutoff && oldSeenCodes.size >= 3) {
-                log(`📅 Sudah lewat batas waktu, berhenti scrape (${collectedPosts.size} posts)`);
+            if (dateFrom && oldSeenCodes.size >= 3) {
+                log(`📅 Sudah lewat batas bawah tanggal, berhenti scrape (${collectedPosts.size} posts)`);
+                reason = 'date_limit';
                 break;
             }
 
@@ -949,6 +1258,7 @@
                         else { if (p.text && !ex.text) ex.text = p.text; }
                     }
                     log(`🏁 Complete: ${collectedPosts.size} posts`);
+                    reason = 'end_of_feed';
                     break;
                 }
             } else {
@@ -957,9 +1267,12 @@
 
             if (!grew && noNewCount >= 5) {
                 log(`🏁 End of feed: ${collectedPosts.size}`);
+                reason = 'end_of_feed';
                 break;
             }
         }
+
+        return reason;
     }
 
     function findRepliesTab() {
@@ -1009,6 +1322,7 @@
         }
 
         for (const post of posts) {
+            await waitWhilePausedOrHidden();
             if (shouldStop) break;
             completed++;
             log(`🔍 Deep ${completed}/${total}: ${post.code}`);
