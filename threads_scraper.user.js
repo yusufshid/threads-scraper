@@ -246,40 +246,44 @@
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            width: 14px;
-            height: 14px;
-            margin-left: 4px;
+            width: 16px;
+            height: 16px;
+            margin-left: 6px;
             border-radius: 50%;
             background: #2a2a2a;
-            border: 1px solid #3a3a3a;
-            color: #808080;
-            font-size: 9px;
-            cursor: pointer;
+            border: 1.5px solid #404040;
+            color: #a0a0a0;
+            font-size: 10px;
+            cursor: help;
             flex-shrink: 0;
             user-select: none;
             font-weight: 700;
+            transition: all 0.15s ease;
         }
 
-        #ts-panel .ts-info:hover {
+        #ts-panel .ts-info:hover, #ts-panel .ts-info:active {
             background: #3a3a3a;
             color: #ffffff;
+            border-color: #505050;
         }
 
         #ts-tip {
             position: fixed;
-            max-width: 240px;
+            max-width: 280px;
             background: #1a1a1a;
             border: 1px solid #3a3a3a;
             color: #e0e0e0;
             font-family: inherit;
-            font-size: 11px;
-            line-height: 1.5;
-            padding: 10px;
-            border-radius: 6px;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.8);
+            font-size: 12px;
+            line-height: 1.6;
+            padding: 12px;
+            border-radius: 8px;
+            box-shadow: 0 12px 32px rgba(0,0,0,0.9);
             z-index: 2147483647;
             display: none;
             white-space: pre-line;
+            word-break: break-word;
+            pointer-events: none;
         }
 
         #ts-panel .btn:hover:not(:disabled) { transform: translateY(-1px); }
@@ -648,40 +652,40 @@
 
             <div class="ts-section">
                 <label class="ts-label">Scroll delay (ms)</label>
-                <input type="number" class="ts-input" id="ts-delay" value="${CONFIG.scrollDelay}" min="500" step="100" title="Delay antar scroll. Lebih besar = lebih stabil, lebih kecil = lebih cepat.">
+                <input type="number" class="ts-input" id="ts-delay" value="${CONFIG.scrollDelay}" min="500" step="100" title="Jeda antar scroll saat scraping. Lebih besar = lebih stabil (text & gambar sempat load penuh), lebih kecil = lebih cepat tapi risiko ada post yang terlewat.">
             </div>
 
             <div class="ts-section">
-                <label class="ts-label">Time limit</label>
-                <select class="ts-input" id="ts-date-limit" title="Batasi seberapa jauh mundur ke belakang saat scraping.">
-                    <option value="0">All time</option>
-                    <option value="1">1 month</option>
-                    <option value="3">3 months</option>
-                    <option value="6" selected>6 months</option>
-                    <option value="12">12 months</option>
-                    <option value="custom">Custom range</option>
+                <label class="ts-label">Batas waktu</label>
+                <select class="ts-input" id="ts-date-limit" title="Batasi seberapa jauh scraper mundur ke belakang. Begitu ketemu beberapa post berturut-turut yang lebih tua dari batas ini, scraper otomatis berhenti scroll.">
+                    <option value="0">Semua waktu</option>
+                    <option value="1">1 bulan terakhir</option>
+                    <option value="3">3 bulan terakhir</option>
+                    <option value="6" selected>6 bulan terakhir</option>
+                    <option value="12">12 bulan terakhir</option>
+                    <option value="custom">Rentang custom</option>
                 </select>
             </div>
 
             <div class="ts-section" id="ts-custom-range" style="display:none;">
-                <label class="ts-label">From date</label>
-                <input type="date" class="ts-input" id="ts-date-from" title="Post lebih lama dari ini tidak disimpan.">
-                <label class="ts-label" style="margin-top:8px;">To date</label>
-                <input type="date" class="ts-input" id="ts-date-to" title="Post lebih baru dari ini di-skip sampai masuk rentang.">
+                <label class="ts-label">Dari tanggal</label>
+                <input type="date" class="ts-input" id="ts-date-from" title="Post yang lebih lama dari tanggal ini nggak akan disimpan — scraper berhenti begitu mentok di sini. Kosongkan kalau nggak ada batas bawah.">
+                <label class="ts-label" style="margin-top:8px;">Sampai tanggal</label>
+                <input type="date" class="ts-input" id="ts-date-to" title="Post yang lebih baru dari tanggal ini di-skip (tetap discroll lewatin, nggak disimpan) sampai ketemu post yang masuk rentang. Kosongkan kalau mau mulai dari yang paling baru.">
             </div>
 
-            <div class="ts-switch" id="ts-switch-replies" title="Include comments dari tab Replies (balasan yang dibuat akun ini di thread orang lain).">
-                <span class="ts-switch-label">Include replies</span>
+            <div class="ts-switch" id="ts-switch-replies" title="Tab 'Replies' di profil = balasan yang DIBUAT oleh akun ini di thread milik orang lain (bukan balasan yang diterima di post akun ini). Aktifkan cuma kalau butuh riset gaya komentar/interaksi akun ini di thread orang. Buat riset konten dari thread milik akun ini sendiri, biarkan mati (default).">
+                <span class="ts-switch-label">Include replies tab</span>
                 <div class="ts-toggle" id="ts-toggle-replies"></div>
             </div>
 
-            <div class="ts-switch" id="ts-switch-shopee" title="Hanya simpan utas yang ada link Shopee affiliate.">
-                <span class="ts-switch-label">Shopee filter</span>
+            <div class="ts-switch" id="ts-switch-shopee" title="Kalau aktif, tiap thread yang lolos scroll akan dicek isi lengkapnya (semua segmen utas oleh author yang sama) — cuma yang salah satu bagiannya ada link Shopee affiliate (s.shopee.co.id, shp.ee, dll) yang disimpan, dan teks yang disimpan adalah utas UTUH, bukan cuma bagian yang ada linknya. Lebih lambat karena tiap thread di-fetch satu-satu.">
+                <span class="ts-switch-label">Shopee affiliate only</span>
                 <div class="ts-toggle" id="ts-toggle-shopee"></div>
             </div>
 
-            <div class="ts-switch" id="ts-switch-deep" title="Buka setiap post dan scrape comments-nya juga. Jauh lebih lambat.">
-                <span class="ts-switch-label">Deep mode</span>
+            <div class="ts-switch" id="ts-switch-deep" title="Buka tiap post satu-satu dan scrape balasan/komentarnya juga (bukan cuma caption post-nya). Jauh lebih lambat karena ada request per post. Aktifkan kalau butuh data percakapan/komentar, bukan cuma isi thread-nya.">
+                <span class="ts-switch-label">Deep mode (scrape comments)</span>
                 <div class="ts-toggle" id="ts-toggle-deep"></div>
             </div>
 
@@ -698,33 +702,33 @@
 
             <div class="ts-actions">
                 <div class="ts-btn-wrap">
-                    <button class="btn btn-go" id="ts-go" title="Start scraping">
+                    <button class="btn btn-go" id="ts-go" title="Mulai scrape dari atas profil ini, sesuai pengaturan delay/batas waktu/toggle di atas. Kalau ada progress tersimpan dari sesi sebelumnya, tombol ini otomatis jadi 'Lanjutkan'.">
                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="6 3 20 12 6 21 6 3"/></svg>
-                        <span class="ts-go-label">Start</span>
+                        <span class="ts-go-label">Start Scraping</span>
                     </button>
                 </div>
                 <div class="ts-btn-wrap">
-                    <button class="btn btn-pause" id="ts-pause" disabled>
+                    <button class="btn btn-pause" id="ts-pause" disabled title="Jeda proses scraping tanpa kehilangan progress — nggak scroll/fetch selama dijeda. Klik lagi (jadi 'Lanjutkan') buat terusin dari titik yang sama.">
                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>Pause
                     </button>
                 </div>
                 <div class="ts-btn-wrap">
-                    <button class="btn btn-stop" id="ts-stop" disabled>
+                    <button class="btn btn-stop" id="ts-stop" disabled title="Hentikan proses scrape sepenuhnya. Data yang sudah kekumpul tetap tersimpan dan bisa didownload atau dilanjutkan lagi nanti (klik Start jadi 'Lanjutkan').">
                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>Stop
                     </button>
                 </div>
                 <div class="ts-btn-wrap">
-                    <button class="btn btn-dl" id="ts-dl" disabled title="Download as JSON">
+                    <button class="btn btn-dl" id="ts-dl" disabled title="Data terstruktur (array objek) lengkap dengan semua field: text, time, like_count, images, has_shopee_link, dst. Cocok diolah lagi pakai kode/script, atau diupload sebagai referensi mentah ke Claude project/knowledge base.&#10;&#10;Contoh: { 'text': '...', 'like_count': 342, 'time': '2026-05-01...' }">
                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>JSON
                     </button>
                 </div>
                 <div class="ts-btn-wrap">
-                    <button class="btn btn-csv" id="ts-csv" disabled title="Download as CSV">
+                    <button class="btn btn-csv" id="ts-csv" disabled title="Format tabel (kolom: code, username, text, time, like_count, dst). Cocok dibuka di Excel/Google Sheets buat sortir & filter cepat — misal urutkan by like_count buat cari thread paling engaging.&#10;&#10;Kurang cocok buat baca teks utas panjang (kepotong per baris).">
                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>CSV
                     </button>
                 </div>
                 <div class="ts-btn-wrap">
-                    <button class="btn btn-csv" id="ts-md" disabled title="Download as Markdown">
+                    <button class="btn btn-csv" id="ts-md" disabled title="Paling enak dibaca — tiap thread jadi satu blok teks lengkap dengan tanggal & like. Paling cocok buat: cari bahan konten, ambil insight, atau dijadiin knowledge base/referensi gaya nulis buat skill Threads Claude (niru gaya atau dimodif).&#10;&#10;Contoh: ## 1 Mei 2026 (isi utas...) ❤️ 342 likes">
                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>Markdown
                     </button>
                 </div>
@@ -736,8 +740,21 @@
         `;
         document.body.appendChild(panel);
 
+        // Wire info icons untuk semua elemen dengan tooltip
         wireInfoIcon(panel.querySelector('#ts-delay').previousElementSibling, panel.querySelector('#ts-delay'));
         wireInfoIcon(panel.querySelector('#ts-date-limit').previousElementSibling, panel.querySelector('#ts-date-limit'));
+        wireInfoIcon(panel.querySelector('#ts-date-from').previousElementSibling, panel.querySelector('#ts-date-from'));
+        const toDateLabel = Array.from(panel.querySelectorAll('.ts-label')).find(el => el.textContent.trim() === 'To date');
+        if (toDateLabel) wireInfoIcon(toDateLabel, panel.querySelector('#ts-date-to'));
+        wireInfoIcon(panel.querySelector('#ts-switch-replies .ts-switch-label'), panel.querySelector('#ts-switch-replies'));
+        wireInfoIcon(panel.querySelector('#ts-switch-shopee .ts-switch-label'), panel.querySelector('#ts-switch-shopee'));
+        wireInfoIcon(panel.querySelector('#ts-switch-deep .ts-switch-label'), panel.querySelector('#ts-switch-deep'));
+        wireInfoIcon(panel.querySelector('#ts-go').parentElement, panel.querySelector('#ts-go'));
+        wireInfoIcon(panel.querySelector('#ts-pause').parentElement, panel.querySelector('#ts-pause'));
+        wireInfoIcon(panel.querySelector('#ts-stop').parentElement, panel.querySelector('#ts-stop'));
+        wireInfoIcon(panel.querySelector('#ts-dl').parentElement, panel.querySelector('#ts-dl'));
+        wireInfoIcon(panel.querySelector('#ts-csv').parentElement, panel.querySelector('#ts-csv'));
+        wireInfoIcon(panel.querySelector('#ts-md').parentElement, panel.querySelector('#ts-md'));
 
         document.getElementById('ts-x').onclick = () => panel.remove();
         document.getElementById('ts-go').onclick = startScraping;
