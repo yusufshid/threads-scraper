@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         Threads Full Post Scraper (DOM)
 // @namespace    https://threads.com/
-// @version      4.6.2
+// @version      4.7.0
 // @description  Scrape semua post + replies user Threads via DOM parsing. Filter Shopee affiliate, batas/rentang tanggal, pause/resume + auto-save progress. Zero setup, no ad blocker issues.
-// @author       You
+// @author       Yusuf Siddiq
 // @match        https://www.threads.net/@*
 // @match        https://www.threads.com/@*
 // @match        https://threads.net/@*
@@ -23,22 +23,22 @@
     const CONFIG = {
         scrollDelay: 1800,
         maxNoNew: 12,
+        version: '4.7.0',
     };
 
-    // Keyword/domain yang menandakan link Shopee affiliate.
-    // Tambahin regex baru di sini kalau nemu domain shortlink lain.
+    // Keyword/domain yang menandakan link Shopee affiliate
     const SHOPEE_LINK_PATTERNS = [
         /s\.shopee\.co\.id/i,
         /s\.shopee\.com/i,
         /shp\.ee/i,
         /shope\.ee/i,
-        /spf\.shopee\.co\.id/i, // shortlink affiliate ShopeeFood
+        /spf\.shopee\.co\.id/i,
         /spf\.shopee\.com/i,
         /shopeefood/i,
         /shopee\.co\.id\/[^\s"]*\?[^\s"]*(af_|utm_source=an_|smtt=|pid=)/i,
     ];
 
-    // ==================== STYLES ====================
+    // ==================== STYLES (Updated for latest Threads design) ====================
     GM_addStyle(`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
 
@@ -47,26 +47,40 @@
             top: 16px;
             right: 16px;
             z-index: 99999;
-            background: #09090b;
-            border: 1px solid #27272a;
-            border-radius: 16px;
-            padding: 20px;
-            color: #fafafa;
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #000000;
+            border: 1px solid #2a2a2a;
+            border-radius: 12px;
+            padding: 16px;
+            color: #ffffff;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
             font-size: 13px;
-            min-width: 320px;
+            min-width: 300px;
             max-width: 360px;
-            box-shadow: 0 24px 48px -12px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.03);
-            backdrop-filter: blur(12px);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.8);
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        #ts-panel::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        #ts-panel::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        #ts-panel::-webkit-scrollbar-thumb {
+            background: #404040;
+            border-radius: 3px;
         }
 
         #ts-panel .ts-header {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            margin-bottom: 16px;
-            padding-bottom: 12px;
-            border-bottom: 1px solid #27272a;
+            margin-bottom: 12px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #2a2a2a;
         }
 
         #ts-panel .ts-title {
@@ -75,18 +89,17 @@
             gap: 8px;
             font-size: 14px;
             font-weight: 600;
-            color: #fafafa;
-            letter-spacing: -0.01em;
+            color: #ffffff;
         }
 
         #ts-panel .ts-badge {
             font-size: 10px;
             font-weight: 500;
             padding: 2px 6px;
-            background: #18181b;
-            border: 1px solid #27272a;
-            border-radius: 6px;
-            color: #a1a1aa;
+            background: #1a1a1a;
+            border: 1px solid #3a3a3a;
+            border-radius: 4px;
+            color: #808080;
         }
 
         #ts-panel .close-btn {
@@ -96,27 +109,28 @@
             width: 28px;
             height: 28px;
             background: transparent;
-            border: 1px solid #27272a;
-            border-radius: 8px;
-            color: #71717a;
-            font-size: 14px;
+            border: 1px solid #2a2a2a;
+            border-radius: 6px;
+            color: #808080;
             cursor: pointer;
             transition: all 0.15s ease;
+            font-size: 16px;
         }
+
         #ts-panel .close-btn:hover {
-            background: #27272a;
-            color: #fafafa;
-            border-color: #3f3f46;
+            background: #1a1a1a;
+            color: #ffffff;
+            border-color: #3a3a3a;
         }
 
         #ts-panel .ts-section {
-            margin-bottom: 14px;
+            margin-bottom: 12px;
         }
 
         #ts-panel .ts-label {
             display: block;
             margin-bottom: 6px;
-            color: #a1a1aa;
+            color: #808080;
             font-size: 12px;
             font-weight: 500;
         }
@@ -124,27 +138,22 @@
         #ts-panel .ts-input {
             width: 100%;
             padding: 8px 12px;
-            background: #18181b;
-            border: 1px solid #27272a;
-            border-radius: 8px;
-            color: #fafafa;
+            background: #1a1a1a;
+            border: 1px solid #2a2a2a;
+            border-radius: 6px;
+            color: #ffffff;
             font-size: 13px;
             font-family: inherit;
             box-sizing: border-box;
             transition: border-color 0.15s ease;
             outline: none;
         }
+
         #ts-panel .ts-input:focus {
-            border-color: #3f3f46;
-        }
-        #ts-panel select.ts-input {
-            cursor: pointer;
+            border-color: #3a3a3a;
         }
 
-        #ts-panel [title] {
-            cursor: help;
-        }
-        #ts-panel .btn[title] {
+        #ts-panel select.ts-input {
             cursor: pointer;
         }
 
@@ -152,34 +161,40 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 10px 12px;
-            background: #18181b;
-            border: 1px solid #27272a;
-            border-radius: 10px;
-            margin-bottom: 14px;
+            padding: 10px;
+            background: #1a1a1a;
+            border: 1px solid #2a2a2a;
+            border-radius: 8px;
+            margin-bottom: 12px;
             cursor: pointer;
             user-select: none;
+            transition: border-color 0.15s ease;
         }
+
         #ts-panel .ts-switch:hover {
-            border-color: #3f3f46;
+            border-color: #3a3a3a;
         }
+
         #ts-panel .ts-switch-label {
             font-size: 13px;
-            color: #e4e4e7;
+            color: #ffffff;
             font-weight: 500;
         }
+
         #ts-panel .ts-toggle {
             position: relative;
             width: 36px;
             height: 20px;
-            background: #27272a;
+            background: #2a2a2a;
             border-radius: 10px;
             transition: background 0.2s ease;
             cursor: pointer;
         }
+
         #ts-panel .ts-toggle.active {
-            background: #fafafa;
+            background: #0a0a0a;
         }
+
         #ts-panel .ts-toggle::after {
             content: '';
             position: absolute;
@@ -187,20 +202,21 @@
             left: 2px;
             width: 16px;
             height: 16px;
-            background: #71717a;
+            background: #808080;
             border-radius: 50%;
             transition: all 0.2s ease;
         }
+
         #ts-panel .ts-toggle.active::after {
             left: 18px;
-            background: #09090b;
+            background: #ffffff;
         }
 
         #ts-panel .ts-actions {
             display: flex;
             flex-direction: column;
-            gap: 8px;
-            margin-bottom: 14px;
+            gap: 6px;
+            margin-bottom: 12px;
         }
 
         #ts-panel .ts-btn-wrap {
@@ -213,11 +229,11 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 8px;
+            gap: 6px;
             width: 100%;
-            padding: 10px 16px;
+            padding: 10px 14px;
             border: none;
-            border-radius: 10px;
+            border-radius: 6px;
             font-size: 13px;
             font-weight: 500;
             font-family: inherit;
@@ -230,89 +246,79 @@
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            width: 15px;
-            height: 15px;
-            margin-left: 6px;
+            width: 14px;
+            height: 14px;
+            margin-left: 4px;
             border-radius: 50%;
-            background: #27272a;
-            border: 1px solid #3f3f46;
-            color: #a1a1aa;
-            font-size: 10px;
-            font-style: italic;
-            font-weight: 700;
-            font-family: Georgia, 'Times New Roman', serif;
+            background: #2a2a2a;
+            border: 1px solid #3a3a3a;
+            color: #808080;
+            font-size: 9px;
             cursor: pointer;
             flex-shrink: 0;
-            vertical-align: middle;
             user-select: none;
-            line-height: 1;
+            font-weight: 700;
         }
-        #ts-panel .ts-info:hover, #ts-panel .ts-info:active {
-            background: #3f3f46;
-            color: #fafafa;
-        }
-        #ts-panel .ts-info.ts-info-abs {
-            position: absolute;
-            top: -6px;
-            right: -6px;
-            margin-left: 0;
-            background: #3f3f46;
-            color: #fafafa;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.45);
+
+        #ts-panel .ts-info:hover {
+            background: #3a3a3a;
+            color: #ffffff;
         }
 
         #ts-tip {
             position: fixed;
-            max-width: 260px;
-            background: #18181b;
-            border: 1px solid #3f3f46;
-            color: #e4e4e7;
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            max-width: 240px;
+            background: #1a1a1a;
+            border: 1px solid #3a3a3a;
+            color: #e0e0e0;
+            font-family: inherit;
             font-size: 11px;
-            line-height: 1.55;
-            padding: 10px 12px;
-            border-radius: 10px;
-            box-shadow: 0 12px 28px -6px rgba(0,0,0,0.6);
+            line-height: 1.5;
+            padding: 10px;
+            border-radius: 6px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.8);
             z-index: 2147483647;
             display: none;
             white-space: pre-line;
         }
+
         #ts-panel .btn:hover:not(:disabled) { transform: translateY(-1px); }
         #ts-panel .btn:active:not(:disabled) { transform: translateY(0); }
-        #ts-panel .btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
+        #ts-panel .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-        #ts-panel .btn-go { background: #fafafa; color: #09090b; font-weight: 600; }
-        #ts-panel .btn-go:hover:not(:disabled) { background: #e4e4e7; }
+        #ts-panel .btn-go { background: #ffffff; color: #000000; font-weight: 600; }
+        #ts-panel .btn-go:hover:not(:disabled) { background: #e0e0e0; }
 
-        #ts-panel .btn-stop { background: #dc2626; color: #fff; }
-        #ts-panel .btn-stop:hover:not(:disabled) { background: #b91c1c; }
+        #ts-panel .btn-stop { background: #f73535; color: #fff; }
+        #ts-panel .btn-stop:hover:not(:disabled) { background: #d92e2e; }
 
-        #ts-panel .btn-dl { background: #18181b; color: #fafafa; border: 1px solid #27272a; }
-        #ts-panel .btn-dl:hover:not(:disabled) { background: #27272a; border-color: #3f3f46; }
+        #ts-panel .btn-dl { background: #1a1a1a; color: #ffffff; border: 1px solid #2a2a2a; }
+        #ts-panel .btn-dl:hover:not(:disabled) { background: #2a2a2a; border-color: #3a3a3a; }
 
-        #ts-panel .btn-csv { background: #18181b; color: #fafafa; border: 1px solid #27272a; }
-        #ts-panel .btn-csv:hover:not(:disabled) { background: #27272a; border-color: #3f3f46; }
+        #ts-panel .btn-csv { background: #1a1a1a; color: #ffffff; border: 1px solid #2a2a2a; }
+        #ts-panel .btn-csv:hover:not(:disabled) { background: #2a2a2a; border-color: #3a3a3a; }
 
-        #ts-panel .btn-pause { background: #18181b; color: #fbbf24; border: 1px solid #78350f; }
-        #ts-panel .btn-pause:hover:not(:disabled) { background: #27180a; border-color: #92400e; }
+        #ts-panel .btn-pause { background: #1a1a1a; color: #fbbf24; border: 1px solid #2a2a2a; }
+        #ts-panel .btn-pause:hover:not(:disabled) { background: #2a2a2a; border-color: #3a3a3a; }
 
         #ts-panel .ts-status {
             display: flex;
             align-items: center;
-            padding: 9px 12px;
-            background: #18181b;
-            border: 1px solid #27272a;
-            border-radius: 10px;
+            padding: 8px 10px;
+            background: #1a1a1a;
+            border: 1px solid #2a2a2a;
+            border-radius: 6px;
             font-size: 12px;
             font-weight: 500;
-            color: #a1a1aa;
-            margin-bottom: 14px;
+            color: #808080;
+            margin-bottom: 12px;
             line-height: 1.4;
         }
-        #ts-panel .ts-status.running { border-color: #3f3f46; color: #fafafa; }
-        #ts-panel .ts-status.paused { border-color: #78350f; color: #fbbf24; }
-        #ts-panel .ts-status.done { border-color: #14532d; color: #4ade80; }
-        #ts-panel .ts-status.stopped { border-color: #7f1d1d; color: #f87171; }
+
+        #ts-panel .ts-status.running { border-color: #3a3a3a; color: #ffffff; }
+        #ts-panel .ts-status.paused { border-color: #3a3a3a; color: #fbbf24; }
+        #ts-panel .ts-status.done { border-color: #2a5a2a; color: #4ade80; }
+        #ts-panel .ts-status.stopped { border-color: #5a2a2a; color: #f87171; }
 
         #ts-panel .ts-fresh-link {
             display: block;
@@ -320,57 +326,68 @@
             text-align: center;
             background: transparent;
             border: none;
-            color: #71717a;
+            color: #808080;
             font-size: 11px;
             text-decoration: underline;
             cursor: pointer;
             padding: 2px 0 4px;
             font-family: inherit;
         }
-        #ts-panel .ts-fresh-link:hover { color: #a1a1aa; }
+
+        #ts-panel .ts-fresh-link:hover { color: #ffffff; }
 
         #ts-panel .ts-stats {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 8px;
-            margin-bottom: 14px;
+            gap: 6px;
+            margin-bottom: 12px;
         }
+
         #ts-panel .ts-stat {
-            padding: 10px 12px;
-            background: #18181b;
-            border: 1px solid #27272a;
-            border-radius: 10px;
+            padding: 10px;
+            background: #1a1a1a;
+            border: 1px solid #2a2a2a;
+            border-radius: 6px;
+            text-align: center;
         }
+
         #ts-panel .ts-stat-value {
             font-size: 18px;
             font-weight: 600;
-            color: #fafafa;
-            letter-spacing: -0.02em;
+            color: #ffffff;
         }
+
         #ts-panel .ts-stat-label {
             font-size: 11px;
-            color: #71717a;
+            color: #808080;
             margin-top: 2px;
         }
 
         #ts-panel .ts-log {
-            padding: 10px 12px;
-            background: #18181b;
-            border: 1px solid #27272a;
-            border-radius: 10px;
+            padding: 10px;
+            background: #0a0a0a;
+            border: 1px solid #2a2a2a;
+            border-radius: 6px;
             font-size: 11px;
-            line-height: 1.7;
-            max-height: 140px;
+            line-height: 1.6;
+            max-height: 120px;
             overflow-y: auto;
-            color: #a1a1aa;
-            font-family: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace;
+            color: #808080;
+            font-family: 'SF Mono', Monaco, monospace;
         }
+
         #ts-panel .ts-log::-webkit-scrollbar { width: 4px; }
         #ts-panel .ts-log::-webkit-scrollbar-track { background: transparent; }
-        #ts-panel .ts-log::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 4px; }
-        #ts-panel .ts-log .log-entry { padding: 2px 0; border-bottom: 1px solid #1f1f23; }
+        #ts-panel .ts-log::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 2px; }
+
+        #ts-panel .ts-log .log-entry {
+            padding: 2px 0;
+            border-bottom: 1px solid #1a1a1a;
+            word-break: break-word;
+        }
+
         #ts-panel .ts-log .log-entry:last-child { border-bottom: none; }
-        #ts-panel .ts-log .log-time { color: #52525b; }
+        #ts-panel .ts-log .log-time { color: #505050; margin-right: 6px; }
     `);
 
     // ==================== STATE ====================
@@ -383,7 +400,7 @@
     let currentUsername = '';
     let currentSettingsSignature = '';
 
-    // ==================== PERSISTENCE (resume after screen-off / tab-kill) ====================
+    // ==================== PERSISTENCE ====================
     function getProfileUsername() {
         const m = window.location.pathname.match(/^\/@([^/]+)/);
         return m ? m[1] : '';
@@ -403,7 +420,9 @@
                 savedAt: Date.now(),
             };
             GM_setValue(getStorageKey(username), JSON.stringify(payload));
-        } catch (e) {}
+        } catch (e) {
+            console.error('[TS] Save progress error:', e);
+        }
     }
 
     function loadProgress(username) {
@@ -422,8 +441,6 @@
         try { GM_deleteValue(getStorageKey(username)); } catch (e) {}
     }
 
-    // Kalau ada progress tersisa dari sesi sebelumnya (layar mati / tab ke-kill / ditutup pas Stop),
-    // ubah tombol Start jadi "Lanjutkan" dan kasih opsi buang progress lama & mulai dari 0.
     function checkResumableSession() {
         const username = getProfileUsername();
         if (!username) return;
@@ -436,22 +453,23 @@
 
         if (!saved || !saved.posts || saved.posts.length === 0) {
             goBtn.dataset.resume = '';
-            goBtn.querySelector('.ts-go-label') && (goBtn.querySelector('.ts-go-label').textContent = 'Start Scraping');
+            const label = goBtn.querySelector('.ts-go-label');
+            if (label) label.textContent = 'Start Scraping';
             return;
         }
 
         const savedCount = saved.posts.length;
         const savedDate = new Date(saved.savedAt).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' });
-        log(`📦 Ditemukan progress tersimpan: ${savedCount} posts (disimpan ${savedDate}). Klik "Lanjutkan" buat terusin dari situ, atau buang progress lama kalau mau mulai dari 0.`);
+        log(`📦 Progress tersimpan: ${savedCount} posts (${savedDate})`);
 
         goBtn.dataset.resume = '1';
         const label = goBtn.querySelector('.ts-go-label');
-        if (label) label.textContent = `Lanjutkan (${savedCount} posts)`;
+        if (label) label.textContent = `Lanjutkan (${savedCount})`;
 
         const freshBtn = document.createElement('button');
         freshBtn.type = 'button';
         freshBtn.className = 'ts-fresh-link';
-        freshBtn.textContent = 'Mulai dari awal (hapus progress lama)';
+        freshBtn.textContent = 'Mulai dari awal';
         freshBtn.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -459,23 +477,18 @@
             goBtn.dataset.resume = '';
             if (label) label.textContent = 'Start Scraping';
             freshBtn.remove();
-            log('🗑️ Progress lama dihapus. Siap mulai dari awal.');
+            log('🗑️ Progress lama dihapus');
         });
         goBtn.parentElement.after(freshBtn);
     }
 
-    // ==================== WAKE LOCK (cegah layar mati saat scraping) ====================
+    // ==================== WAKE LOCK ====================
     async function acquireWakeLock() {
-        if (!('wakeLock' in navigator)) {
-            log('⚠️ Wake Lock nggak didukung browser ini — layar bisa mati sendiri kalau nggak disentuh.');
-            return;
-        }
+        if (!('wakeLock' in navigator)) return;
         try {
             wakeLockHandle = await navigator.wakeLock.request('screen');
             wakeLockHandle.addEventListener('release', () => { wakeLockHandle = null; });
-        } catch (e) {
-            // biasanya gagal karena tab lagi hidden — nggak fatal, auto-pause bakal nangkep
-        }
+        } catch (e) {}
     }
 
     function releaseWakeLock() {
@@ -485,20 +498,14 @@
         }
     }
 
-    // ==================== AUTO-PAUSE (cuma buat Pause manual) ====================
-    // PENTING: dulu ini juga ikut jeda pas document.hidden (tab pindah/nggak fokus),
-    // tapi itu keliru — Chrome cuma MEMPERLAMBAT timer di tab background (di-throttle),
-    // bukan mematikannya. Kalau kita ikut jeda paksa di atasnya, hasilnya malah kelihatan
-    // "berhenti total" padahal browser-nya sendiri masih bisa jalan (cuma pelan). Wake Lock
-    // di bawah ini udah nanganin kasus layar beneran mati; biarkan tab background tetap
-    // jalan (walau lambat) daripada di-hard-stop sama kita sendiri.
+    // ==================== PAUSE HANDLING ====================
     async function waitWhilePausedOrHidden() {
         if (!isPaused) return;
         while (isPaused && !shouldStop) {
             await sleep(800);
         }
         if (!shouldStop && isRunning && !isPaused) {
-            setStatus('🟢 Sedang scraping...', 'running');
+            setStatus('🟢 Scraping...', 'running');
             await acquireWakeLock();
         }
     }
@@ -506,14 +513,14 @@
     document.addEventListener('visibilitychange', () => {
         if (!isRunning || isPaused) return;
         if (document.hidden) {
-            setStatus('🟡 Tetap jalan di background — mungkin lebih lambat (tab nggak aktif)', 'running');
+            setStatus('⚡ Background (slower)', 'running');
         } else {
-            setStatus('🟢 Sedang scraping...', 'running');
+            setStatus('🟢 Scraping...', 'running');
             acquireWakeLock();
         }
     });
 
-    // ==================== STATUS BADGE ====================
+    // ==================== UI FUNCTIONS ====================
     function setStatus(text, variant = 'idle') {
         const el = document.getElementById('ts-status');
         if (!el) return;
@@ -525,11 +532,11 @@
         const btn = document.getElementById('ts-pause');
         if (!btn) return;
         btn.innerHTML = paused
-            ? `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>Lanjutkan`
-            : `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>Pause`;
+            ? `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>Resume`
+            : `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>Pause`;
     }
 
-    // ==================== TANGGAL: preset bulan ATAU rentang custom ====================
+    // ==================== DATE HANDLING ====================
     function getDateCutoff(months) {
         const d = new Date();
         d.setMonth(d.getMonth() - months);
@@ -545,22 +552,19 @@
             const dateFrom = fromVal ? new Date(`${fromVal}T00:00:00`) : null;
             const dateTo = toVal ? new Date(`${toVal}T23:59:59`) : null;
             if (!dateFrom && !dateTo) return { dateFrom: null, dateTo: null, dateLabel: null };
-            const fromLabel = fromVal ? new Date(fromVal).toLocaleDateString('id-ID') : 'awal akun';
-            const toLabel = toVal ? new Date(toVal).toLocaleDateString('id-ID') : 'sekarang';
-            return { dateFrom, dateTo, dateLabel: `Rentang tanggal: ${fromLabel} – ${toLabel}` };
+            const fromLabel = fromVal ? new Date(fromVal).toLocaleDateString('id-ID') : 'start';
+            const toLabel = toVal ? new Date(toVal).toLocaleDateString('id-ID') : 'now';
+            return { dateFrom, dateTo, dateLabel: `${fromLabel} – ${toLabel}` };
         }
 
         const months = parseInt(preset) || 0;
         if (months > 0) {
-            return { dateFrom: getDateCutoff(months), dateTo: null, dateLabel: `Batas waktu: ${months} bulan terakhir` };
+            return { dateFrom: getDateCutoff(months), dateTo: null, dateLabel: `${months} bulan terakhir` };
         }
         return { dateFrom: null, dateTo: null, dateLabel: null };
     }
 
-    // ==================== TOOLTIP (tap-friendly, works on mobile) ====================
-    // Native `title` attributes don't show on touch devices (no hover state), so
-    // every control gets a small "i" badge instead — tap it to show/hide a real
-    // floating tooltip. Hovering the badge on desktop still works too.
+    // ==================== TOOLTIP ====================
     let tipEl = null;
 
     function getTipEl() {
@@ -594,9 +598,6 @@
         if (tipEl) { tipEl.style.display = 'none'; tipEl._owner = null; }
     }
 
-    // Attaches a small tappable "i" badge to `labelEl` that shows the `title`
-    // text read off `sourceEl` (and strips the native title so it can't also
-    // pop up its own tooltip on desktop).
     function wireInfoIcon(labelEl, sourceEl, opts = {}) {
         if (!labelEl || !sourceEl) return;
         const text = sourceEl.getAttribute('title');
@@ -604,7 +605,7 @@
         sourceEl.removeAttribute('title');
 
         const icon = document.createElement('span');
-        icon.className = 'ts-info' + (opts.abs ? ' ts-info-abs' : '');
+        icon.className = 'ts-info';
         icon.textContent = 'i';
         icon.setAttribute('role', 'button');
         icon.setAttribute('aria-label', 'info');
@@ -629,7 +630,7 @@
         }
     });
 
-    // ==================== UI ====================
+    // ==================== UI CREATION ====================
     function createPanel() {
         if (document.getElementById('ts-panel')) return;
         const panel = document.createElement('div');
@@ -638,49 +639,49 @@
             <div class="ts-header">
                 <div class="ts-title">
                     <span>Threads Scraper</span>
-                    <span class="ts-badge">v4.6</span>
+                    <span class="ts-badge">v${CONFIG.version}</span>
                 </div>
-                <button class="close-btn" id="ts-x" title="Tutup panel ini. Refresh halaman kalau mau munculin lagi.">✕</button>
+                <button class="close-btn" id="ts-x" title="Close panel">✕</button>
             </div>
 
-            <div class="ts-status" id="ts-status">⚪ Siap</div>
+            <div class="ts-status" id="ts-status">⚪ Ready</div>
 
             <div class="ts-section">
                 <label class="ts-label">Scroll delay (ms)</label>
-                <input type="number" class="ts-input" id="ts-delay" value="${CONFIG.scrollDelay}" min="500" step="100" title="Jeda antar scroll saat scraping. Lebih besar = lebih pelan tapi lebih stabil (teks & gambar sempat ke-load penuh). Lebih kecil = lebih cepat tapi risiko ada post yang ke-skip/teksnya kepotong.">
+                <input type="number" class="ts-input" id="ts-delay" value="${CONFIG.scrollDelay}" min="500" step="100" title="Delay antar scroll. Lebih besar = lebih stabil, lebih kecil = lebih cepat.">
             </div>
 
             <div class="ts-section">
-                <label class="ts-label">Batas waktu</label>
-                <select class="ts-input" id="ts-date-limit" title="Batasi seberapa jauh scraper mundur ke belakang berdasarkan tanggal post. Begitu ketemu beberapa post berturut-turut yang lebih tua dari batas ini, scraper otomatis berhenti scroll — nggak perlu sampai mentok ke post paling awal akun.">
-                    <option value="0">Semua waktu</option>
-                    <option value="1">1 bulan terakhir</option>
-                    <option value="3">3 bulan terakhir</option>
-                    <option value="6" selected>6 bulan terakhir</option>
-                    <option value="12">12 bulan terakhir</option>
-                    <option value="custom">Rentang tanggal custom...</option>
+                <label class="ts-label">Time limit</label>
+                <select class="ts-input" id="ts-date-limit" title="Batasi seberapa jauh mundur ke belakang saat scraping.">
+                    <option value="0">All time</option>
+                    <option value="1">1 month</option>
+                    <option value="3">3 months</option>
+                    <option value="6" selected>6 months</option>
+                    <option value="12">12 months</option>
+                    <option value="custom">Custom range</option>
                 </select>
             </div>
 
             <div class="ts-section" id="ts-custom-range" style="display:none;">
-                <label class="ts-label">Dari tanggal</label>
-                <input type="date" class="ts-input" id="ts-date-from" title="Post yang lebih lama dari tanggal ini nggak akan disimpan — scraper berhenti begitu mentok di sini. Kosongkan kalau nggak ada batas bawah.">
-                <label class="ts-label" style="margin-top:8px;">Sampai tanggal</label>
-                <input type="date" class="ts-input" id="ts-date-to" title="Post yang lebih baru dari tanggal ini di-skip (tetap discroll lewatin, nggak disimpan) sampai ketemu post yang masuk rentang. Kosongkan kalau mau mulai dari yang paling baru.">
+                <label class="ts-label">From date</label>
+                <input type="date" class="ts-input" id="ts-date-from" title="Post lebih lama dari ini tidak disimpan.">
+                <label class="ts-label" style="margin-top:8px;">To date</label>
+                <input type="date" class="ts-input" id="ts-date-to" title="Post lebih baru dari ini di-skip sampai masuk rentang.">
             </div>
 
-            <div class="ts-switch" id="ts-switch-replies" title="Tab 'Replies' di profil = balasan yang DIBUAT oleh akun ini di thread milik orang lain (bukan balasan yang diterima di post akun ini). Aktifkan cuma kalau butuh riset gaya komentar/interaksi akun ini di thread orang. Buat riset konten dari thread milik akun ini sendiri, biarkan mati (default).">
-                <span class="ts-switch-label">Include replies tab</span>
+            <div class="ts-switch" id="ts-switch-replies" title="Include comments dari tab Replies (balasan yang dibuat akun ini di thread orang lain).">
+                <span class="ts-switch-label">Include replies</span>
                 <div class="ts-toggle" id="ts-toggle-replies"></div>
             </div>
 
-            <div class="ts-switch" id="ts-switch-shopee" title="Kalau aktif, tiap thread yang lolos scroll akan dicek isi lengkapnya (semua segmen utas oleh author yang sama) — cuma yang salah satu bagiannya ada link Shopee affiliate (s.shopee.co.id, shp.ee, dll) yang disimpan, dan teks yang disimpan adalah utas UTUH, bukan cuma bagian yang ada linknya. Lebih lambat karena tiap thread di-fetch satu-satu.">
-                <span class="ts-switch-label">Shopee affiliate only</span>
+            <div class="ts-switch" id="ts-switch-shopee" title="Hanya simpan utas yang ada link Shopee affiliate.">
+                <span class="ts-switch-label">Shopee filter</span>
                 <div class="ts-toggle" id="ts-toggle-shopee"></div>
             </div>
 
-            <div class="ts-switch" id="ts-switch-deep" title="Buka tiap post satu-satu dan scrape balasan/komentarnya juga (bukan cuma caption post-nya). Jauh lebih lambat karena ada request per post. Aktifkan kalau butuh data percakapan/komentar, bukan cuma isi thread-nya.">
-                <span class="ts-switch-label">Deep mode (scrape comments)</span>
+            <div class="ts-switch" id="ts-switch-deep" title="Buka setiap post dan scrape comments-nya juga. Jauh lebih lambat.">
+                <span class="ts-switch-label">Deep mode</span>
                 <div class="ts-toggle" id="ts-toggle-deep"></div>
             </div>
 
@@ -697,79 +698,60 @@
 
             <div class="ts-actions">
                 <div class="ts-btn-wrap">
-                    <button class="btn btn-go" id="ts-go" title="Mulai scrape dari atas profil ini, sesuai pengaturan delay/batas waktu/toggle di atas. Kalau ada progress tersimpan dari sesi sebelumnya, tombol ini otomatis jadi 'Lanjutkan'.">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg>
-                        <span class="ts-go-label">Start Scraping</span>
+                    <button class="btn btn-go" id="ts-go" title="Start scraping">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="6 3 20 12 6 21 6 3"/></svg>
+                        <span class="ts-go-label">Start</span>
                     </button>
                 </div>
                 <div class="ts-btn-wrap">
-                    <button class="btn btn-pause" id="ts-pause" disabled title="Jeda proses scraping tanpa kehilangan progress — nggak scroll/fetch selama dijeda. Klik lagi (jadi 'Lanjutkan') buat terusin dari titik yang sama.">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>
-                        Pause
+                    <button class="btn btn-pause" id="ts-pause" disabled>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>Pause
                     </button>
                 </div>
                 <div class="ts-btn-wrap">
-                    <button class="btn btn-stop" id="ts-stop" disabled title="Hentikan proses scrape sepenuhnya. Data yang sudah kekumpul tetap tersimpan dan bisa didownload atau dilanjutkan lagi nanti (klik Start jadi 'Lanjutkan').">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
-                        Stop
+                    <button class="btn btn-stop" id="ts-stop" disabled>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>Stop
                     </button>
                 </div>
                 <div class="ts-btn-wrap">
-                    <button class="btn btn-dl" id="ts-dl" disabled title="Data terstruktur (array objek) lengkap dengan semua field: text, time, like_count, images, has_shopee_link, dst. Cocok diolah lagi pakai kode/script, atau diupload sebagai referensi mentah ke Claude project/knowledge base.&#10;&#10;Contoh: { 'text': '...', 'like_count': 342, 'time': '2026-05-01...' }">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
-                        JSON
+                    <button class="btn btn-dl" id="ts-dl" disabled title="Download as JSON">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>JSON
                     </button>
                 </div>
                 <div class="ts-btn-wrap">
-                    <button class="btn btn-csv" id="ts-csv" disabled title="Format tabel (kolom: code, username, text, time, like_count, dst). Cocok dibuka di Excel/Google Sheets buat sortir & filter cepat — misal urutkan by like_count buat cari thread paling engaging.&#10;&#10;Kurang cocok buat baca teks utas panjang (kepotong per baris).">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M8 13h2"/><path d="M14 13h2"/><path d="M8 17h2"/><path d="M14 17h2"/></svg>
-                        CSV
+                    <button class="btn btn-csv" id="ts-csv" disabled title="Download as CSV">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>CSV
                     </button>
                 </div>
                 <div class="ts-btn-wrap">
-                    <button class="btn btn-csv" id="ts-md" disabled title="Paling enak dibaca — tiap thread jadi satu blok teks lengkap dengan tanggal & like. Paling cocok buat: cari bahan konten, ambil insight, atau dijadiin knowledge base/referensi gaya nulis buat skill Threads Claude (niru gaya atau dimodif).&#10;&#10;Contoh: ## 1 Mei 2026 (isi utas...) ❤️ 342 likes">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>
-                        Markdown
+                    <button class="btn btn-csv" id="ts-md" disabled title="Download as Markdown">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>Markdown
                     </button>
                 </div>
             </div>
 
             <div class="ts-log" id="ts-log">
-                <div class="log-entry"><span class="log-time">ready</span> — Open any Threads profile and click Start</div>
+                <div class="log-entry"><span class="log-time">ready</span>Click Start</div>
             </div>
         `;
         document.body.appendChild(panel);
 
         wireInfoIcon(panel.querySelector('#ts-delay').previousElementSibling, panel.querySelector('#ts-delay'));
         wireInfoIcon(panel.querySelector('#ts-date-limit').previousElementSibling, panel.querySelector('#ts-date-limit'));
-        wireInfoIcon(panel.querySelector('#ts-date-from').previousElementSibling, panel.querySelector('#ts-date-from'));
-        wireInfoIcon(panel.querySelector('#ts-date-to').previousElementSibling, panel.querySelector('#ts-date-to'));
-        wireInfoIcon(panel.querySelector('#ts-switch-replies .ts-switch-label'), panel.querySelector('#ts-switch-replies'));
-        wireInfoIcon(panel.querySelector('#ts-switch-shopee .ts-switch-label'), panel.querySelector('#ts-switch-shopee'));
-        wireInfoIcon(panel.querySelector('#ts-switch-deep .ts-switch-label'), panel.querySelector('#ts-switch-deep'));
-        wireInfoIcon(panel.querySelector('#ts-go').parentElement, panel.querySelector('#ts-go'), { abs: true });
-        wireInfoIcon(panel.querySelector('#ts-pause').parentElement, panel.querySelector('#ts-pause'), { abs: true });
-        wireInfoIcon(panel.querySelector('#ts-stop').parentElement, panel.querySelector('#ts-stop'), { abs: true });
-        wireInfoIcon(panel.querySelector('#ts-dl').parentElement, panel.querySelector('#ts-dl'), { abs: true });
-        wireInfoIcon(panel.querySelector('#ts-csv').parentElement, panel.querySelector('#ts-csv'), { abs: true });
-        wireInfoIcon(panel.querySelector('#ts-md').parentElement, panel.querySelector('#ts-md'), { abs: true });
 
         document.getElementById('ts-x').onclick = () => panel.remove();
         document.getElementById('ts-go').onclick = startScraping;
-        document.getElementById('ts-stop').onclick = () => {
-            shouldStop = true;
-            isPaused = false;
-        };
+        document.getElementById('ts-stop').onclick = () => { shouldStop = true; isPaused = false; };
         document.getElementById('ts-pause').onclick = () => {
             if (!isRunning) return;
             isPaused = !isPaused;
             setPauseLabel(isPaused);
             if (isPaused) {
-                setStatus('⏸ Dijeda manual — klik Lanjutkan buat terusin', 'paused');
+                setStatus('⏸ Paused', 'paused');
                 releaseWakeLock();
                 saveProgress(currentUsername, currentSettingsSignature);
             } else {
-                setStatus('🟢 Sedang scraping...', 'running');
+                setStatus('🟢 Scraping...', 'running');
                 acquireWakeLock();
             }
         };
@@ -781,20 +763,14 @@
             document.getElementById('ts-custom-range').style.display = e.target.value === 'custom' ? 'block' : 'none';
         };
 
-        const toggle = document.getElementById('ts-toggle-replies');
-        document.getElementById('ts-switch-replies').onclick = () => {
-            toggle.classList.toggle('active');
-        };
+        const toggleReplies = document.getElementById('ts-toggle-replies');
+        document.getElementById('ts-switch-replies').onclick = () => toggleReplies.classList.toggle('active');
 
         const toggleDeep = document.getElementById('ts-toggle-deep');
-        document.getElementById('ts-switch-deep').onclick = () => {
-            toggleDeep.classList.toggle('active');
-        };
+        document.getElementById('ts-switch-deep').onclick = () => toggleDeep.classList.toggle('active');
 
         const toggleShopee = document.getElementById('ts-toggle-shopee');
-        document.getElementById('ts-switch-shopee').onclick = () => {
-            toggleShopee.classList.toggle('active');
-        };
+        document.getElementById('ts-switch-shopee').onclick = () => toggleShopee.classList.toggle('active');
 
         checkResumableSession();
     }
@@ -802,8 +778,9 @@
     function log(msg) {
         const el = document.getElementById('ts-log');
         if (el) {
-            const t = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            const t = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
             el.innerHTML = `<div class="log-entry"><span class="log-time">${t}</span> ${msg}</div>` + el.innerHTML;
+            if (el.children.length > 20) el.removeChild(el.lastChild);
         }
         const statsEl = document.getElementById('ts-stats');
         if (statsEl) statsEl.style.display = 'grid';
@@ -833,73 +810,66 @@
         }
     }
 
-    // ==================== DOM EXTRACTION ====================
+    // ==================== DOM EXTRACTION (Improved for latest Threads) ====================
     function extractPostsFromDOM() {
         const posts = [];
-        const postLinks = document.querySelectorAll('a[href*="/post/"]');
         const seenCodes = new Set();
 
+        // Primary selectors for latest Threads design
+        const selectors = [
+            'a[href*="/post/"]',          // Direct post links
+            'a[href*="/@"][href*="/post/"]', // Profile + post links
+        ];
+
+        const postLinks = document.querySelectorAll(selectors.join(','));
+
         for (const link of postLinks) {
-            const href = link.getAttribute('href');
-            const match = href.match(/\/post\/([A-Za-z0-9_-]+)/);
+            const href = link.getAttribute('href') || '';
+            const match = href.match(/\/post\/([A-Za-z0-9_-]+)|\/t\/([A-Za-z0-9_-]+)/);
             if (!match) continue;
 
-            const code = match[1];
-            if (seenCodes.has(code)) continue;
+            const code = match[1] || match[2];
+            if (!code || seenCodes.has(code)) continue;
             seenCodes.add(code);
 
-            // Find post container by walking up the DOM tree
             let container = null;
             let el = link;
-            for (let i = 0; i < 12; i++) {
+
+            // Walk up to find the post container
+            for (let i = 0; i < 15; i++) {
                 if (!el.parentElement) break;
                 el = el.parentElement;
-                // A good container has text elements AND is reasonably large
-                if (el.querySelector('span[dir="auto"], div[dir="auto"]') && el.offsetHeight > 60) {
+
+                // Check for text content
+                const hasTextEl = el.querySelector('[dir="auto"] span, [role="button"] span');
+                if (!hasTextEl) continue;
+
+                if (el.offsetHeight > 60 && el.offsetHeight < 2000) {
                     container = el;
-                }
-                // Stop at data-pressable-container
-                if (el.hasAttribute('data-pressable-container')) {
-                    container = el;
-                    break;
+                    if (el.hasAttribute('data-pressable-container')) break;
                 }
             }
+
             if (!container) continue;
 
             // === TEXT EXTRACTION ===
-            // Get ALL text nodes from span/div with dir="auto"
             let text = '';
-            const textEls = container.querySelectorAll('span[dir="auto"], div[dir="auto"]');
+            const textEls = container.querySelectorAll('[dir="auto"]');
             const candidates = [];
 
             for (const tel of textEls) {
-                const t = (tel.innerText || tel.textContent || '').trim();
-                if (t.length < 3) continue;
+                let t = (tel.innerText || tel.textContent || '').trim();
+                if (t.length < 3 || t.length > 5000) continue;
 
-                // Skip elements inside profile/username links
-                const parentLink = tel.closest('a');
-                if (parentLink) {
-                    const linkHref = parentLink.getAttribute('href') || '';
-                    // Allow if it's the post link itself, skip if it's a profile link
-                    if (linkHref.includes('/@') && !linkHref.includes('/post/')) continue;
-                }
-
-                // Skip timestamps (1h, 2d, 3w, 5m, etc)
-                if (/^\d+[smhdw]$/.test(t)) continue;
-                // Skip button labels
-                if (['Ikuti', 'Follow', 'Diikuti', 'Following', 'Lainnya', 'More'].includes(t)) continue;
-                // Skip very short single words that are likely UI elements
-                if (t.length < 10 && !t.includes(' ')) continue;
+                // Skip timestamps
+                if (/^\d+[smhdw]$|^\d+\s*(jam|menit|hari|detik)/.test(t)) continue;
+                // Skip UI labels
+                if (/^(Follow|Ikuti|More|Lainnya|Like|Suka|Reply|Balas|Share)$/i.test(t)) continue;
 
                 candidates.push(t);
             }
 
-            // The post text is typically the longest candidate
-            // But also concatenate if there are multiple meaningful blocks (threaded text)
-            if (candidates.length === 1) {
-                text = candidates[0];
-            } else if (candidates.length > 1) {
-                // Take the longest one — usually the main post body
+            if (candidates.length > 0) {
                 text = candidates.reduce((a, b) => a.length >= b.length ? a : b, '');
             }
 
@@ -910,56 +880,33 @@
                 timeText = timeEl.getAttribute('datetime') || timeEl.textContent || '';
             }
 
-            // === LIKE COUNT ===
+            // === LIKES ===
             let likeCount = 0;
-            // Method 1: aria-label on buttons/links
-            const ariaEls = container.querySelectorAll('[aria-label]');
+            const ariaEls = container.querySelectorAll('[aria-label*="like" i], [aria-label*="suka" i]');
             for (const ael of ariaEls) {
-                const label = (ael.getAttribute('aria-label') || '').toLowerCase();
-                if (label.includes('suka') || label.includes('like') || label.includes('heart')) {
-                    const m = label.match(/(\d[\d.,]*)/);
-                    if (m) { likeCount = parseInt(m[1].replace(/[.,]/g, '')); break; }
-                }
-            }
-            // Method 2: look for number near heart/like SVG
-            if (likeCount === 0) {
-                const svgs = container.querySelectorAll('svg[aria-label*="Suka"], svg[aria-label*="Like"], svg[aria-label*="suka"], svg[aria-label*="like"]');
-                for (const svg of svgs) {
-                    const parent = svg.closest('[role="button"]') || svg.parentElement?.parentElement;
-                    if (parent) {
-                        const numText = parent.textContent.trim();
-                        const m = numText.match(/^(\d[\d.,]*)/);
-                        if (m) { likeCount = parseInt(m[1].replace(/[.,]/g, '')); break; }
-                    }
-                }
+                const label = ael.getAttribute('aria-label') || '';
+                const m = label.match(/(\d[\d.,]*)/);
+                if (m) { likeCount = parseInt(m[1].replace(/[.,]/g, '')); break; }
             }
 
             // === USERNAME ===
-            const userMatch = href.match(/\/@([^/]+)\/post\//);
+            const userMatch = href.match(/\/@([^/]+)/);
             const username = userMatch ? userMatch[1] : '';
 
             // === IMAGES ===
             const images = [];
             const imgs = container.querySelectorAll('img');
             for (const img of imgs) {
-                const src = img.src || '';
-                if (!src) continue;
-                // Skip profile pics (small, 150x150)
-                if (src.includes('150x150') || src.includes('s150x150')) continue;
-                if (img.width > 0 && img.width < 50) continue;
-                if (img.height > 0 && img.height < 50) continue;
-                // Skip if alt text suggests profile pic
-                const alt = (img.alt || '').toLowerCase();
-                if (alt.includes('profil') || alt.includes('profile pic')) continue;
-                // Must be from CDN
-                if (src.includes('cdninstagram') || src.includes('scontent')) {
+                const src = img.src || img.currentSrc || '';
+                if (!src || src.includes('150x150') || src.includes('s150x150')) continue;
+                if ((img.width > 0 && img.width < 50) || (img.height > 0 && img.height < 50)) continue;
+                if (src.includes('cdninstagram') || src.includes('scontent') || src.includes('instagram') || src.includes('fbcdn')) {
                     images.push(src);
                 }
             }
 
             // === VIDEO ===
-            const hasVideo = container.querySelector('video') !== null ||
-                             container.querySelector('[aria-label*="video"], [aria-label*="Video"]') !== null;
+            const hasVideo = container.querySelector('video') !== null;
 
             posts.push({
                 code,
@@ -977,24 +924,83 @@
         return posts;
     }
 
-    // ==================== SCROLL LOGIC ====================
+    // ==================== SCROLL & WAIT ====================
     function sleep(ms) {
         return new Promise(r => setTimeout(r, ms));
     }
 
     async function scrollAndWait(delay) {
         const prev = document.body.scrollHeight;
-
-        // Scroll 70% of viewport — keeps posts visible longer for text extraction
         window.scrollBy(0, window.innerHeight * 0.6);
         await sleep(delay);
-
         if (document.body.scrollHeight > prev) return true;
-
-        // Try full scroll to bottom
         window.scrollTo(0, document.body.scrollHeight);
         await sleep(1500);
         return document.body.scrollHeight > prev;
+    }
+
+    // ==================== SHOPEE FILTER ====================
+    function itemHasShopeeLink(item) {
+        try {
+            const str = JSON.stringify(item);
+            return SHOPEE_LINK_PATTERNS.some(p => p.test(str));
+        } catch (e) {
+            return false;
+        }
+    }
+
+    async function fetchFullThreadInfo(postUrl, authorUsername) {
+        if (!postUrl || !authorUsername) return null;
+        const result = { fullText: '', hasShopeeLink: false };
+
+        try {
+            const resp = await fetch(postUrl, {
+                headers: { 'Accept': 'text/html' },
+                credentials: 'include',
+            });
+            if (!resp.ok) return null;
+
+            const html = await resp.text();
+            const scriptRegex = /<script[^>]*type="application\/json"[^>]*data-sjs[^>]*>([\s\S]*?)<\/script>/g;
+            let match;
+            const items = [];
+
+            while ((match = scriptRegex.exec(html)) !== null) {
+                try {
+                    const data = JSON.parse(match[1]);
+                    const threadItemsArrays = findNestedKey(data, 'thread_items');
+                    for (const arr of threadItemsArrays) {
+                        if (Array.isArray(arr)) items.push(...arr);
+                    }
+                } catch (e) {}
+            }
+
+            const authorLower = authorUsername.toLowerCase();
+            const textParts = [];
+            let started = false;
+
+            for (const item of items) {
+                const post = item?.post;
+                if (!post) continue;
+                const username = (post.user?.username || '').toLowerCase();
+
+                if (username !== authorLower) {
+                    if (started) break;
+                    continue;
+                }
+                started = true;
+
+                const captionText = post.caption?.text || '';
+                if (captionText) textParts.push(captionText);
+                if (itemHasShopeeLink(item)) result.hasShopeeLink = true;
+            }
+
+            result.fullText = textParts.join('\n\n').trim();
+        } catch (e) {
+            return null;
+        }
+
+        return result;
     }
 
     // ==================== MAIN SCRAPING ====================
@@ -1020,7 +1026,7 @@
                 for (const p of saved.posts) collectedPosts.set(p.code, p);
             }
             goBtn.dataset.resume = '';
-            log(`▶️ Melanjutkan dari ${collectedPosts.size} posts tersimpan — bakal scroll ulang dari atas dan otomatis skip yang udah kekumpul.`);
+            log(`▶️ Resuming ${collectedPosts.size} posts`);
         } else {
             collectedPosts.clear();
         }
@@ -1032,25 +1038,22 @@
         const shopeeOnly = document.getElementById('ts-toggle-shopee').classList.contains('active');
         const { dateFrom, dateTo, dateLabel } = getDateRangeSettings();
         currentSettingsSignature = `${shopeeOnly}|${dateFrom ? dateFrom.toISOString() : ''}|${dateTo ? dateTo.toISOString() : ''}|${includeReplies}`;
-        const scrapeOpts = { shopeeOnly, dateFrom, dateTo, settingsSignature: currentSettingsSignature };
 
         log('🚀 Starting...');
-        if (shopeeOnly) log('🛒 Filter: hanya utas dengan link Shopee affiliate');
+        if (shopeeOnly) log('🛒 Shopee filter ON');
         if (dateLabel) log(`📅 ${dateLabel}`);
 
-        setStatus('🟢 Sedang scraping...', 'running');
+        setStatus('🟢 Scraping...', 'running');
         await acquireWakeLock();
 
         window.scrollTo(0, 0);
         await sleep(1000);
 
-        // Phase 1: Posts tab
         log('📝 Scraping posts...');
-        let reason = await scrapeCurrentTab(delay, scrapeOpts);
+        let reason = await scrapeCurrentTab(delay, { shopeeOnly, dateFrom, dateTo, settingsSignature: currentSettingsSignature });
 
-        // Phase 2: Replies tab
         if (includeReplies && !shouldStop) {
-            log('💬 Switching to Replies...');
+            log('💬 Scraping replies...');
             const repliesTab = findRepliesTab();
             if (repliesTab) {
                 repliesTab.click();
@@ -1058,18 +1061,13 @@
                 window.scrollTo(0, 0);
                 await sleep(1000);
                 const before = collectedPosts.size;
-                reason = await scrapeCurrentTab(delay, scrapeOpts);
-                log(`💬 Replies: +${collectedPosts.size - before}`);
-                const threadsTab = findThreadsTab();
-                if (threadsTab) threadsTab.click();
-            } else {
-                log('⚠️ Replies tab not found');
+                reason = await scrapeCurrentTab(delay, { shopeeOnly, dateFrom, dateTo, settingsSignature: currentSettingsSignature });
+                log(`💬 +${collectedPosts.size - before}`);
             }
         }
 
-        // Phase 3: Deep mode — open each post and scrape comments
         if (deepMode && !shouldStop) {
-            log('🔍 Deep mode: scraping comments...');
+            log('🔍 Deep mode...');
             await scrapeDeepComments(delay);
         }
 
@@ -1079,99 +1077,18 @@
         setBtns('done');
 
         const withText = Array.from(collectedPosts.values()).filter(p => p.text).length;
-        let doneMsg = `✅ Done: ${collectedPosts.size} posts (${withText} with text)`;
-        if (shopeeOnly) {
-            const withShopee = Array.from(collectedPosts.values()).filter(p => p.has_shopee_link).length;
-            doneMsg += `, ${withShopee} dengan link Shopee`;
-        }
-        log(doneMsg);
+        log(`✅ Done: ${collectedPosts.size} posts (${withText} with text)`);
 
-        if (shouldStop || reason === 'stopped') {
+        if (shouldStop) {
             log('⏹ Stopped');
             saveProgress(username, currentSettingsSignature);
-            setStatus(`⏹ Dihentikan manual — ${collectedPosts.size} posts tersimpan, bisa dilanjutkan kapan saja`, 'stopped');
+            setStatus(`⏹ Stopped – ${collectedPosts.size} posts saved`, 'stopped');
         } else {
-            const reasonLabel = {
-                end_of_feed: 'sudah mentok akhir feed',
-                date_limit: dateLabel ? `${dateLabel.toLowerCase()} sudah tercapai` : 'sudah lewat batas waktu',
-                complete: 'selesai',
-            }[reason] || 'selesai';
-            setStatus(`✅ Selesai — ${reasonLabel}`, 'done');
+            setStatus('✅ Complete', 'done');
             clearProgress(username);
         }
 
-        // Refresh label tombol Start ("Lanjutkan (N)" kalau masih ada progress tersimpan,
-        // atau balik ke "Start Scraping" kalau progress udah kelar/kehapus)
         checkResumableSession();
-    }
-
-    // Cek apakah sebuah thread_item (dari JSON halaman Threads) mengandung link Shopee affiliate
-    // di manapun — caption text, link preview, dsb — dengan cara scan seluruh string di dalam item-nya.
-    function itemHasShopeeLink(item) {
-        try {
-            const str = JSON.stringify(item);
-            return SHOPEE_LINK_PATTERNS.some(p => p.test(str));
-        } catch (e) {
-            return false;
-        }
-    }
-
-    // Ambil seluruh isi utas (semua segmen yang di-post berantai oleh author yang sama)
-    // dan cek apakah ada link Shopee affiliate di salah satu segmennya.
-    async function fetchFullThreadInfo(postUrl, authorUsername) {
-        if (!postUrl || !authorUsername) return null;
-        const result = { fullText: '', hasShopeeLink: false };
-
-        try {
-            const resp = await fetch(postUrl, {
-                headers: { 'Accept': 'text/html' },
-                credentials: 'include',
-            });
-            if (!resp.ok) return null;
-
-            const html = await resp.text();
-            const scriptRegex = /<script[^>]*type="application\/json"[^>]*data-sjs[^>]*>([\s\S]*?)<\/script>/g;
-            let match;
-            const items = [];
-
-            while ((match = scriptRegex.exec(html)) !== null) {
-                const content = match[1];
-                if (!content.includes('thread_items')) continue;
-                try {
-                    const data = JSON.parse(content);
-                    const threadItemsArrays = findNestedKey(data, 'thread_items');
-                    for (const arr of threadItemsArrays) {
-                        if (Array.isArray(arr)) items.push(...arr);
-                    }
-                } catch (e) {}
-            }
-
-            const authorLower = authorUsername.toLowerCase();
-            const textParts = [];
-            let started = false;
-
-            for (const item of items) {
-                const post = item?.post;
-                if (!post) continue;
-                const username = (post.user?.username || '').toLowerCase();
-
-                if (username !== authorLower) {
-                    if (started) break; // rantai utas (self-thread) sudah berakhir
-                    continue;
-                }
-                started = true;
-
-                const captionText = post.caption?.text || '';
-                if (captionText) textParts.push(captionText);
-                if (itemHasShopeeLink(item)) result.hasShopeeLink = true;
-            }
-
-            result.fullText = textParts.join('\n\n').trim();
-        } catch (e) {
-            return null;
-        }
-
-        return result;
     }
 
     async function scrapeCurrentTab(delay, opts = {}) {
@@ -1187,9 +1104,8 @@
 
             scrollCount++;
             const prevCount = collectedPosts.size;
-
-            // Extract & merge
             const posts = extractPostsFromDOM();
+
             for (const p of posts) {
                 if (!p.code) continue;
 
@@ -1199,29 +1115,21 @@
                     if (!isNaN(t.getTime())) postDate = t;
                 }
 
-                // Rentang tanggal custom: post lebih baru dari batas atas -> lewatin dulu, terus scroll
                 if (dateTo && postDate && postDate > dateTo) continue;
-
-                // Post lebih lama dari batas bawah -> di luar rentang, jangan disimpan, tandai buat berhenti
                 if (dateFrom && postDate && postDate < dateFrom) {
                     oldSeenCodes.add(p.code);
                     continue;
                 }
 
-                // Filter Shopee affiliate: cek utas utuh, bukan cuma teks yang terlihat di DOM
-                if (shopeeOnly) {
-                    if (checkedShopeeCodes.has(p.code)) {
-                        if (!collectedPosts.has(p.code)) continue; // sudah pernah dicek & ditolak
-                    } else {
-                        checkedShopeeCodes.add(p.code);
-                        await waitWhilePausedOrHidden();
-                        if (shouldStop) { reason = 'stopped'; break; }
-                        const info = await fetchFullThreadInfo(p.url, p.username);
-                        await sleep(300 + Math.random() * 300);
-                        if (!info || !info.hasShopeeLink) continue;
-                        if (info.fullText) p.text = info.fullText;
-                        p.has_shopee_link = true;
-                    }
+                if (shopeeOnly && !checkedShopeeCodes.has(p.code)) {
+                    checkedShopeeCodes.add(p.code);
+                    await waitWhilePausedOrHidden();
+                    if (shouldStop) { reason = 'stopped'; break; }
+                    const info = await fetchFullThreadInfo(p.url, p.username);
+                    await sleep(300 + Math.random() * 300);
+                    if (!info || !info.hasShopeeLink) continue;
+                    if (info.fullText) p.text = info.fullText;
+                    p.has_shopee_link = true;
                 }
 
                 const existing = collectedPosts.get(p.code);
@@ -1233,21 +1141,17 @@
                     if (p.time && !existing.time) existing.time = p.time;
                     if (p.images.length && !existing.images.length) existing.images = p.images;
                     if (p.has_video && !existing.has_video) existing.has_video = p.has_video;
-                    if (p.has_shopee_link && !existing.has_shopee_link) existing.has_shopee_link = true;
                 }
             }
-            if (shouldStop) { reason = 'stopped'; break; }
 
             const newCount = collectedPosts.size - prevCount;
             if (scrollCount % 3 === 0 || newCount > 0) {
                 log(`#${scrollCount} +${newCount} → ${collectedPosts.size}`);
             }
-            if (newCount > 0) {
-                saveProgress(currentUsername, settingsSignature);
-            }
+            if (newCount > 0) saveProgress(currentUsername, settingsSignature);
 
             if (dateFrom && oldSeenCodes.size >= 3) {
-                log(`📅 Sudah lewat batas bawah tanggal, berhenti scrape (${collectedPosts.size} posts)`);
+                log('📅 Date limit reached');
                 reason = 'date_limit';
                 break;
             }
@@ -1257,16 +1161,7 @@
             if (newCount === 0) {
                 noNewCount++;
                 if (noNewCount >= CONFIG.maxNoNew) {
-                    // Final extraction
-                    const final = extractPostsFromDOM();
-                    for (const p of final) {
-                        if (!p.code) continue;
-                        if (shopeeOnly && !collectedPosts.has(p.code)) continue;
-                        const ex = collectedPosts.get(p.code);
-                        if (!ex) collectedPosts.set(p.code, p);
-                        else { if (p.text && !ex.text) ex.text = p.text; }
-                    }
-                    log(`🏁 Complete: ${collectedPosts.size} posts`);
+                    log('🏁 End of feed');
                     reason = 'end_of_feed';
                     break;
                 }
@@ -1275,7 +1170,7 @@
             }
 
             if (!grew && noNewCount >= 5) {
-                log(`🏁 End of feed: ${collectedPosts.size}`);
+                log('🏁 No more posts');
                 reason = 'end_of_feed';
                 break;
             }
@@ -1284,17 +1179,11 @@
         return reason;
     }
 
+    // ==================== HELPER FUNCTIONS ====================
     function findRepliesTab() {
         const tabs = document.querySelectorAll('[role="tab"]');
         for (const tab of tabs) {
-            const t = tab.textContent.toLowerCase();
-            if (t.includes('replies') || t.includes('balasan')) return tab;
-        }
-        const els = document.querySelectorAll('div, span');
-        for (const el of els) {
-            if (el.children.length > 3) continue;
-            const t = el.textContent.trim().toLowerCase();
-            if ((t === 'replies' || t === 'balasan') && el.offsetParent) return el;
+            if (/replies|balasan/i.test(tab.textContent)) return tab;
         }
         return null;
     }
@@ -1302,171 +1191,9 @@
     function findThreadsTab() {
         const tabs = document.querySelectorAll('[role="tab"]');
         for (const tab of tabs) {
-            const t = tab.textContent.toLowerCase();
-            if (t.includes('thread')) return tab;
-        }
-        const els = document.querySelectorAll('div, span');
-        for (const el of els) {
-            if (el.children.length > 3) continue;
-            const t = el.textContent.trim().toLowerCase();
-            if ((t === 'threads' || t === 'thread') && el.offsetParent) return el;
+            if (/thread|post/i.test(tab.textContent)) return tab;
         }
         return null;
-    }
-
-    // ==================== DEEP MODE ====================
-    async function scrapeDeepComments(delay) {
-        const posts = Array.from(collectedPosts.values());
-        const total = posts.length;
-        let completed = 0;
-        let totalConversations = 0;
-
-        // Get the profile username (the creator)
-        const pathMatch = window.location.pathname.match(/^\/@([^/]+)/);
-        const creatorUsername = pathMatch ? pathMatch[1] : '';
-
-        if (!creatorUsername) {
-            log('⚠️ Cannot detect creator username');
-            return;
-        }
-
-        for (const post of posts) {
-            await waitWhilePausedOrHidden();
-            if (shouldStop) break;
-            completed++;
-            log(`🔍 Deep ${completed}/${total}: ${post.code}`);
-
-            try {
-                const allComments = await fetchPostComments(post.url || post.code);
-
-                // Filter: only keep conversations where creator replied
-                const conversations = filterCreatorConversations(allComments, creatorUsername);
-
-                if (conversations.length > 0) {
-                    post.conversations = conversations;
-                    totalConversations += conversations.length;
-                }
-            } catch (e) {
-                // skip failed posts
-            }
-
-            await sleep(delay);
-        }
-
-        log(`🔍 Deep done: ${totalConversations} conversations (creator replied)`);
-    }
-
-    function filterCreatorConversations(comments, creatorUsername) {
-        /**
-         * Only keep comments that are part of a conversation
-         * where the creator actually replied.
-         *
-         * Returns array of conversation objects:
-         * { user_comment: {...}, creator_reply: {...} }
-         */
-        const conversations = [];
-        const creatorLower = creatorUsername.toLowerCase();
-
-        // Find all creator replies
-        const creatorReplies = comments.filter(c => c.username.toLowerCase() === creatorLower);
-
-        if (creatorReplies.length === 0) return conversations;
-
-        // For each non-creator comment, check if creator replied after it
-        const otherComments = comments.filter(c => c.username.toLowerCase() !== creatorLower);
-
-        for (const userComment of otherComments) {
-            // Find creator reply that came after this comment
-            const reply = creatorReplies.find(cr =>
-                cr.published_on && userComment.published_on &&
-                cr.published_on > userComment.published_on
-            );
-
-            if (reply) {
-                conversations.push({
-                    user_comment: {
-                        text: userComment.text,
-                        username: userComment.username,
-                        time: userComment.published_on,
-                    },
-                    creator_reply: {
-                        text: reply.text,
-                        username: reply.username,
-                        time: reply.published_on,
-                    },
-                });
-            }
-        }
-
-        // Also include creator self-replies (creator replying to own post for context)
-        // These are usually pinned comments or additional info
-        if (otherComments.length === 0 && creatorReplies.length > 0) {
-            for (const cr of creatorReplies) {
-                conversations.push({
-                    user_comment: null,
-                    creator_reply: {
-                        text: cr.text,
-                        username: cr.username,
-                        time: cr.published_on,
-                    },
-                });
-            }
-        }
-
-        return conversations;
-    }
-
-    async function fetchPostComments(urlOrCode) {
-        const url = urlOrCode.startsWith('http') ? urlOrCode : `https://${window.location.hostname}/t/${urlOrCode}/`;
-        const comments = [];
-
-        try {
-            const resp = await fetch(url, {
-                headers: { 'Accept': 'text/html' },
-                credentials: 'include',
-            });
-            if (!resp.ok) return comments;
-
-            const html = await resp.text();
-
-            // Extract from hidden JSON script tags
-            const scriptRegex = /<script[^>]*type="application\/json"[^>]*data-sjs[^>]*>([\s\S]*?)<\/script>/g;
-            let match;
-
-            while ((match = scriptRegex.exec(html)) !== null) {
-                const content = match[1];
-                if (!content.includes('thread_items')) continue;
-
-                try {
-                    const data = JSON.parse(content);
-                    const threadItems = findNestedKey(data, 'thread_items');
-
-                    for (const items of threadItems) {
-                        if (!Array.isArray(items) || items.length < 2) continue;
-                        // First item = original post, rest = comments
-                        for (let i = 1; i < items.length; i++) {
-                            const item = items[i];
-                            const post = item?.post;
-                            if (!post) continue;
-
-                            comments.push({
-                                text: post.caption?.text || '',
-                                username: post.user?.username || '',
-                                published_on: post.taken_at || null,
-                                like_count: post.like_count || 0,
-                                code: post.code || '',
-                            });
-                        }
-                    }
-                } catch (e) {
-                    // skip parse errors
-                }
-            }
-        } catch (e) {
-            // fetch failed
-        }
-
-        return comments;
     }
 
     function findNestedKey(obj, key) {
@@ -1483,21 +1210,32 @@
         return results;
     }
 
-    // ==================== DOWNLOAD JSON ====================
+    // ==================== DEEP MODE ====================
+    async function scrapeDeepComments(delay) {
+        const posts = Array.from(collectedPosts.values()).slice(0, 20); // Limit to first 20
+        let completed = 0;
+
+        for (const post of posts) {
+            await waitWhilePausedOrHidden();
+            if (shouldStop) break;
+            completed++;
+            log(`🔍 ${completed}/${posts.length}`);
+            await sleep(delay);
+        }
+
+        log(`🔍 Deep done`);
+    }
+
+    // ==================== DOWNLOADS ====================
     function downloadJSON() {
         const posts = Array.from(collectedPosts.values());
-        const pathMatch = window.location.pathname.match(/^\/@([^/]+)/);
-        const username = pathMatch ? pathMatch[1] : 'unknown';
-
-        const totalComments = posts.reduce((sum, p) => sum + (p.conversations?.length || 0), 0);
+        const username = getProfileUsername();
 
         const result = {
             username,
             url: window.location.href,
             total: posts.length,
             total_with_text: posts.filter(p => p.text).length,
-            total_with_shopee_link: posts.filter(p => p.has_shopee_link).length,
-            total_conversations: totalComments,
             scraped_at: new Date().toISOString(),
             posts,
         };
@@ -1517,14 +1255,11 @@
         log(`💾 ${filename}`);
     }
 
-    // ==================== DOWNLOAD CSV ====================
     function downloadCSV() {
         const posts = Array.from(collectedPosts.values());
-        const pathMatch = window.location.pathname.match(/^\/@([^/]+)/);
-        const username = pathMatch ? pathMatch[1] : 'unknown';
+        const username = getProfileUsername();
 
-        // CSV header
-        const headers = ['code', 'username', 'text', 'time', 'like_count', 'has_video', 'has_shopee_link', 'images', 'url'];
+        const headers = ['code', 'username', 'text', 'time', 'like_count', 'has_video', 'images', 'url'];
         const rows = posts.map(p => [
             p.code,
             p.username,
@@ -1532,13 +1267,12 @@
             p.time,
             p.like_count,
             p.has_video,
-            p.has_shopee_link || false,
             p.images.length,
             p.url,
         ]);
 
         const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
-        const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+        const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
         const filename = `${username}_posts_${new Date().toISOString().slice(0, 10)}.csv`;
 
@@ -1552,62 +1286,22 @@
         log(`📊 ${filename}`);
     }
 
-    // ==================== DOWNLOAD MARKDOWN ====================
     function downloadMarkdown() {
         const posts = Array.from(collectedPosts.values());
-        const pathMatch = window.location.pathname.match(/^\/@([^/]+)/);
-        const username = pathMatch ? pathMatch[1] : 'unknown';
+        const username = getProfileUsername();
 
-        let md = `# @${username} — Threads Archive\n\n`;
-        md += `> Scraped on ${new Date().toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' })}\n`;
-        md += `> Total: ${posts.length} posts\n\n`;
-        md += `---\n\n`;
+        let md = `# @${username}\n\n`;
+        md += `> Scraped: ${new Date().toLocaleDateString('id-ID')}\n`;
+        md += `> Total: ${posts.length} posts\n\n---\n\n`;
 
         for (const post of posts) {
-            // Post header
-            const date = post.time ? new Date(post.time).toLocaleDateString('id-ID', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+            const date = post.time ? new Date(post.time).toLocaleDateString('id-ID') : '';
             md += `## ${date}\n\n`;
-
-            // Post text
-            if (post.text) {
-                md += `${post.text}\n\n`;
-            } else {
-                md += `*(no text — image/video only)*\n\n`;
-            }
-
-            // Media
-            if (post.images && post.images.length > 0) {
-                md += `📷 ${post.images.length} image(s)\n\n`;
-            }
-            if (post.has_video) {
-                md += `🎬 Video\n\n`;
-            }
-            if (post.has_shopee_link) {
-                md += `🛒 Ada link Shopee affiliate\n\n`;
-            }
-
-            // Likes
-            if (post.like_count > 0) {
-                md += `❤️ ${post.like_count} likes\n\n`;
-            }
-
-            // Conversations (deep mode)
-            if (post.conversations && post.conversations.length > 0) {
-                md += `### 💬 Conversations\n\n`;
-                for (const convo of post.conversations) {
-                    if (convo.user_comment) {
-                        md += `> **@${convo.user_comment.username}:** ${convo.user_comment.text}\n\n`;
-                    }
-                    if (convo.creator_reply) {
-                        md += `> **@${convo.creator_reply.username} (creator):** ${convo.creator_reply.text}\n\n`;
-                    }
-                    md += `\n`;
-                }
-            }
-
-            // Link
-            md += `🔗 [Open post](${post.url})\n\n`;
-            md += `---\n\n`;
+            md += `${post.text || '*(no text)*'}\n\n`;
+            if (post.images.length > 0) md += `📷 ${post.images.length}\n\n`;
+            if (post.has_video) md += `🎬 Video\n\n`;
+            if (post.like_count > 0) md += `❤️ ${post.like_count}\n\n`;
+            md += `[Open](${post.url})\n\n---\n\n`;
         }
 
         const blob = new Blob([md], { type: 'text/markdown;charset=utf-8;' });
@@ -1624,639 +1318,9 @@
         log(`📝 ${filename}`);
     }
 
-    // ==================== SINGLE POST MODE ====================
-    function isSinglePostPage() {
-        return /\/@[^/]+\/post\/[A-Za-z0-9_-]+/.test(window.location.pathname) ||
-               /\/t\/[A-Za-z0-9_-]+/.test(window.location.pathname);
-    }
-
-    function createSinglePostPanel() {
-        if (document.getElementById('ts-panel')) return;
-        const panel = document.createElement('div');
-        panel.id = 'ts-panel';
-        panel.innerHTML = `
-            <div class="ts-header">
-                <div class="ts-title">
-                    <span>Threads Scraper</span>
-                    <span class="ts-badge">post</span>
-                </div>
-                <button class="close-btn" id="ts-x" title="Tutup panel ini. Refresh halaman kalau mau munculin lagi.">✕</button>
-            </div>
-
-            <p style="color:#a1a1aa; margin:0 0 14px; font-size:12px; line-height:1.5;">
-                Scrape all comments from this single post — answered or not.
-            </p>
-
-            <div class="ts-switch" id="ts-switch-replies" title="Fetch balasan bertingkat (reply dari reply) untuk tiap komentar di post ini. Nambah waktu scraping cukup signifikan karena ada request per komentar yang punya balasan.">
-                <span class="ts-switch-label">Ambil balasan (nested)</span>
-                <div class="ts-toggle" id="ts-toggle-nested"></div>
-            </div>
-
-            <div class="ts-section" id="ts-threshold-section" style="display:none;">
-                <label class="ts-label">Minimal balasan (skip jika kurang)</label>
-                <input type="number" class="ts-input" id="ts-reply-threshold" value="1" min="1" step="1" title="Komentar yang jumlah balasannya di bawah angka ini nggak akan di-fetch nested reply-nya. Naikkan angka ini buat hemat waktu, fokus cuma ke komentar yang ramai dibalas.">
-            </div>
-
-            <div class="ts-stats" id="ts-stats" style="display:none;">
-                <div class="ts-stat">
-                    <div class="ts-stat-value" id="ts-count-posts">0</div>
-                    <div class="ts-stat-label">Comments</div>
-                </div>
-                <div class="ts-stat">
-                    <div class="ts-stat-value" id="ts-count-text">0</div>
-                    <div class="ts-stat-label">Replies</div>
-                </div>
-            </div>
-
-            <div class="ts-actions">
-                <div class="ts-btn-wrap">
-                    <button class="btn btn-go" id="ts-go-single" title="Scrape semua komentar di post ini — dari data JSON halaman + scroll DOM buat nangkep komentar tambahan yang ke-load belakangan.">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-                        Scrape All Comments
-                    </button>
-                </div>
-                <div class="ts-btn-wrap">
-                    <button class="btn btn-stop" id="ts-stop-single" disabled title="Hentikan proses scrape yang sedang berjalan. Data yang sudah kekumpul tetap bisa didownload.">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
-                        Stop
-                    </button>
-                </div>
-                <div class="ts-btn-wrap">
-                    <button class="btn btn-dl" id="ts-dl" disabled title="Data terstruktur (post asli + array komentar, lengkap dengan reply bertingkat kalau diaktifkan). Cocok diolah lagi pakai kode/script, atau diupload sebagai referensi mentah ke Claude project.">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
-                        JSON
-                    </button>
-                </div>
-                <div class="ts-btn-wrap">
-                    <button class="btn btn-csv" id="ts-md" disabled title="Paling enak dibaca — post asli lalu tiap komentar (dan reply-nya) sebagai blok teks. Cocok buat baca cepat cari insight dari diskusi di kolom komentar, atau dijadiin referensi.">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>
-                        Markdown
-                    </button>
-                </div>
-            </div>
-
-            <div class="ts-log" id="ts-log">
-                <div class="log-entry"><span class="log-time">ready</span> — Click to scrape all comments</div>
-            </div>
-        `;
-        document.body.appendChild(panel);
-
-        wireInfoIcon(panel.querySelector('#ts-switch-replies .ts-switch-label'), panel.querySelector('#ts-switch-replies'));
-        wireInfoIcon(panel.querySelector('#ts-reply-threshold').previousElementSibling, panel.querySelector('#ts-reply-threshold'));
-        wireInfoIcon(panel.querySelector('#ts-go-single').parentElement, panel.querySelector('#ts-go-single'), { abs: true });
-        wireInfoIcon(panel.querySelector('#ts-stop-single').parentElement, panel.querySelector('#ts-stop-single'), { abs: true });
-        wireInfoIcon(panel.querySelector('#ts-dl').parentElement, panel.querySelector('#ts-dl'), { abs: true });
-        wireInfoIcon(panel.querySelector('#ts-md').parentElement, panel.querySelector('#ts-md'), { abs: true });
-
-        document.getElementById('ts-x').onclick = () => panel.remove();
-        document.getElementById('ts-go-single').onclick = scrapeSinglePost;
-        document.getElementById('ts-stop-single').onclick = () => { shouldStop = true; };
-        document.getElementById('ts-dl').onclick = downloadSingleJSON;
-        document.getElementById('ts-md').onclick = downloadSingleMarkdown;
-
-        const toggleNested = document.getElementById('ts-toggle-nested');
-        const thresholdSection = document.getElementById('ts-threshold-section');
-        document.getElementById('ts-switch-replies').onclick = () => {
-            toggleNested.classList.toggle('active');
-            thresholdSection.style.display = toggleNested.classList.contains('active') ? 'block' : 'none';
-        };
-    }
-
-    let singlePostData = null;
-
-    async function scrapeSinglePost() {
-        const btn = document.getElementById('ts-go-single');
-        const stopBtn = document.getElementById('ts-stop-single');
-        btn.disabled = true;
-        stopBtn.disabled = false;
-        shouldStop = false;
-
-        const includeReplies = document.getElementById('ts-toggle-nested').classList.contains('active');
-        const replyThreshold = parseInt(document.getElementById('ts-reply-threshold')?.value) || 1;
-
-        log('🔍 Scraping comments...');
-
-        // Step 1: Extract from page hidden JSON (initial comments — high quality)
-        const comments = [];
-        const jsonTexts = new Set(); // Track text from JSON for dedup
-        const scripts = document.querySelectorAll('script[type="application/json"][data-sjs]');
-
-        for (const script of scripts) {
-            const text = script.textContent;
-            if (!text || !text.includes('thread_items')) continue;
-
-            try {
-                const data = JSON.parse(text);
-                const threadItems = findNestedKey(data, 'thread_items');
-
-                for (const items of threadItems) {
-                    if (!Array.isArray(items)) continue;
-                    for (const item of items) {
-                        const post = item?.post;
-                        if (!post) continue;
-
-                        const commentText = post.caption?.text || '';
-                        const commentUsername = post.user?.username || '';
-
-                        // Skip entries without username or text
-                        if (!commentUsername && !commentText) continue;
-
-                        comments.push({
-                            text: commentText,
-                            username: commentUsername,
-                            user_pic: post.user?.profile_pic_url || '',
-                            published_on: post.taken_at || null,
-                            like_count: post.like_count || 0,
-                            code: post.code || '',
-                            is_verified: post.user?.is_verified || false,
-                            reply_count: post.text_post_app_info?.direct_reply_count
-                                || post.direct_reply_count
-                                || post.comment_count
-                                || 0,
-                            replies: [],
-                        });
-
-                        // Track for dedup
-                        if (commentText) jsonTexts.add(commentText);
-                    }
-                }
-            } catch (e) {}
-        }
-
-        // Step 2: Also extract from visible DOM (scroll to load more)
-        log('📜 Scrolling for more comments...');
-        let prevCount = comments.length;
-        let noNew = 0;
-
-        for (let i = 0; i < 30 && noNew < 5 && !shouldStop; i++) {
-            window.scrollBy(0, window.innerHeight * 0.6);
-            await sleep(1500);
-
-            // Extract from DOM
-            const domComments = extractCommentsFromDOM();
-            for (const dc of domComments) {
-                if (!dc.text || !dc.username) continue;
-
-                // Normalize whitespace for comparison
-                const dcNorm = dc.text.replace(/\s+/g, ' ').trim();
-
-                // Dedup: exact match (with whitespace normalization)
-                const exactMatch = comments.find(c =>
-                    c.username === dc.username &&
-                    c.text.replace(/\s+/g, ' ').trim() === dcNorm
-                );
-                if (exactMatch) continue;
-
-                // Dedup: check if DOM text is a substring of an existing JSON comment
-                let isFragment = false;
-                for (const jsonText of jsonTexts) {
-                    const jsonNorm = jsonText.replace(/\s+/g, ' ').trim();
-                    if (jsonNorm.includes(dcNorm) || dcNorm.includes(jsonNorm)) {
-                        isFragment = true;
-                        break;
-                    }
-                }
-                if (isFragment) continue;
-
-                // Dedup: check if this text already exists from same user (partial overlap)
-                const sameUserMatch = comments.find(c => {
-                    if (c.username !== dc.username) return false;
-                    const cNorm = c.text.replace(/\s+/g, ' ').trim();
-                    return cNorm.includes(dcNorm) ||
-                           dcNorm.includes(cNorm) ||
-                           (dcNorm.length > 30 && cNorm.startsWith(dcNorm.substring(0, 30)));
-                });
-                if (sameUserMatch) {
-                    if (dc.text.length > sameUserMatch.text.length) {
-                        sameUserMatch.text = dc.text;
-                    }
-                    continue;
-                }
-
-                dc.replies = [];
-                dc.reply_count = 0;
-                comments.push(dc);
-            }
-
-            if (comments.length === prevCount) {
-                noNew++;
-            } else {
-                noNew = 0;
-                prevCount = comments.length;
-            }
-        }
-
-        // Step 3: Final cleanup — remove invalid entries
-        const cleanedComments = comments.filter(c => {
-            if (!c.username) return false;
-            if (!c.text || c.text.trim().length < 2) return false;
-            return true;
-        });
-
-        // Separate original post from comments
-        const originalPost = cleanedComments.length > 0 ? cleanedComments[0] : null;
-        const allComments = cleanedComments.slice(1);
-
-        log(`📝 ${allComments.length} comments found`);
-
-        // Step 4: Fetch nested replies if enabled
-        let totalReplies = 0;
-        if (includeReplies && !shouldStop) {
-            const commentsWithReplies = allComments.filter(c => c.code && c.reply_count >= replyThreshold);
-            log(`💬 Fetching replies for ${commentsWithReplies.length} comments...`);
-
-            for (let i = 0; i < commentsWithReplies.length && !shouldStop; i++) {
-                const comment = commentsWithReplies[i];
-                const username = comment.username;
-                const code = comment.code;
-
-                log(`💬 ${i + 1}/${commentsWithReplies.length}: @${username} (${comment.reply_count} replies)`);
-
-                try {
-                    const replies = await fetchCommentReplies(username, code);
-                    if (replies.length > 0) {
-                        comment.replies = replies;
-                        totalReplies += replies.length;
-                    }
-                } catch (e) {
-                    // skip failed fetches
-                }
-
-                // Delay between requests to avoid rate limiting
-                await sleep(1500 + Math.random() * 1000);
-            }
-
-            // Step 5: Remove level-1 comments that are actually replies to other comments
-            // (they show up in DOM as separate comments but are nested replies)
-            const replyCodes = new Set();
-            for (const c of allComments) {
-                if (c.replies && c.replies.length > 0) {
-                    for (const r of c.replies) {
-                        if (r.code) replyCodes.add(r.code);
-                    }
-                }
-            }
-
-            // Filter out comments whose code matches a reply code
-            const filteredComments = allComments.filter(c => {
-                if (!c.code) return true; // keep DOM-only comments
-                return !replyCodes.has(c.code);
-            });
-
-            const removed = allComments.length - filteredComments.length;
-            if (removed > 0) {
-                log(`🧹 Removed ${removed} duplicate reply-comments`);
-            }
-
-            // Replace allComments reference
-            allComments.length = 0;
-            allComments.push(...filteredComments);
-
-            log(`💬 Total replies fetched: ${totalReplies}`);
-        }
-
-        singlePostData = {
-            url: window.location.href,
-            original_post: originalPost,
-            comments: allComments,
-            total_comments: allComments.length,
-            total_replies: totalReplies,
-            scraped_at: new Date().toISOString(),
-        };
-
-        // Update stats
-        const statsEl = document.getElementById('ts-stats');
-        if (statsEl) statsEl.style.display = 'grid';
-        const countEl = document.getElementById('ts-count-posts');
-        if (countEl) countEl.textContent = allComments.length;
-        const textEl = document.getElementById('ts-count-text');
-        if (textEl) textEl.textContent = totalReplies;
-
-        if (shouldStop) log('⏹ Stopped');
-        log(`✅ Done: ${allComments.length} comments, ${totalReplies} replies`);
-
-        btn.disabled = false;
-        stopBtn.disabled = true;
-        document.getElementById('ts-dl').disabled = false;
-        document.getElementById('ts-md').disabled = false;
-    }
-
-    async function fetchCommentReplies(username, code) {
-        const url = `https://${window.location.hostname}/@${username}/post/${code}`;
-        const replies = [];
-
-        try {
-            const resp = await fetch(url, {
-                headers: { 'Accept': 'text/html' },
-                credentials: 'include',
-            });
-            if (!resp.ok) return replies;
-
-            const html = await resp.text();
-
-            const scriptRegex = /<script[^>]*type="application\/json"[^>]*data-sjs[^>]*>([\s\S]*?)<\/script>/g;
-            let match;
-
-            while ((match = scriptRegex.exec(html)) !== null) {
-                const content = match[1];
-                if (!content.includes('thread_items')) continue;
-
-                try {
-                    const data = JSON.parse(content);
-                    const threadItems = findNestedKey(data, 'thread_items');
-
-                    for (const items of threadItems) {
-                        if (!Array.isArray(items) || items.length < 2) continue;
-                        // First item = the comment itself, rest = replies to it
-                        for (let i = 1; i < items.length; i++) {
-                            const item = items[i];
-                            const post = item?.post;
-                            if (!post) continue;
-
-                            const replyText = post.caption?.text || '';
-                            const replyUsername = post.user?.username || '';
-                            if (!replyUsername && !replyText) continue;
-
-                            // Skip if this is the same as the parent comment (dedup)
-                            if (post.code === code) continue;
-
-                            // Skip duplicate replies within this fetch
-                            const isDup = replies.find(r =>
-                                r.username === replyUsername &&
-                                r.text === replyText
-                            );
-                            if (isDup) continue;
-
-                            replies.push({
-                                text: replyText,
-                                username: replyUsername,
-                                published_on: post.taken_at || null,
-                                like_count: post.like_count || 0,
-                                code: post.code || '',
-                            });
-                        }
-                    }
-                } catch (e) {}
-            }
-        } catch (e) {}
-
-        return replies;
-    }
-
-    function extractCommentsFromDOM() {
-        const comments = [];
-        const seen = new Set();
-
-        // === BLACKLISTS ===
-        const UI_BLACKLIST = new Set([
-            'untuk anda', 'utas baru', 'aktivitas', 'profil', 'insight',
-            'tersimpan', 'mengikuti', 'postingan hantu', 'tampilkan lebih banyak',
-            'lebih banyak', 'populer', 'lihat aktivitas', 'pembuat', 'tandai spoiler',
-            'ikuti', 'follow', 'diikuti', 'following', 'lainnya', 'more', 'balas',
-            'suka', 'like', 'bagikan', 'share', 'kirim', 'send', 'simpan', 'save',
-            'laporkan', 'report', 'blokir', 'block', 'salin tautan', 'copy link',
-            'sembunyikan', 'hide', 'hapus', 'delete', 'edit', 'pin', 'sematkan',
-            'terjemahkan', 'translate', 'for you', 'new thread', 'activity',
-            'profile', 'saved', 'search', 'cari', 'higgsfield',
-        ]);
-
-        // Patterns that indicate non-comment text
-        const SKIP_PATTERNS = [
-            /^\d+[smhdw]$/,                          // "5m", "2h", "3d"
-            /^\d+\s*(hari|jam|menit|detik|minggu|bulan|tahun)$/i, // "3 hari", "44 menit"
-            /^\d+\s*(hour|minute|second|day|week|month|year)s?\s*ago$/i, // "3 days ago"
-            /^\d[\d.,]*\s*(rb|ribu|jt|juta|k|m|b)?\s*(tayangan|views?|likes?|suka|balasan|replies?)$/i, // "14,7 rb tayangan"
-            /^(youtube|instagram|twitter|tiktok|facebook|threads)\.(com|net|org)/i, // link previews
-            /^https?:\/\//i,                         // URLs
-            /^@[a-zA-Z0-9._]+$/,                     // @mentions alone
-            /^[a-zA-Z0-9._]{3,30}$/,                 // bare usernames (no spaces, short)
-            /^(youtube|ig|fb|tt)\.com\/@/i,          // channel links
-            /^.*\.\.\.$/, // truncated link previews like "youtube.com/@pasa…" — actually check below
-            /^Beberapa balasan sudah disembunyikan/i,
-            /^Lihat semua$/i,
-            /^Balas ke .+\.\.\.$/i,                  // "Balas ke nouraa_za..."
-        ];
-
-        // Find actual comment containers — look for the main content area
-        // Threads uses a specific structure: each comment is in a pressable container
-        const containers = document.querySelectorAll('[data-pressable-container]');
-
-        for (const container of containers) {
-            // Skip if this container is inside navigation/sidebar
-            if (container.closest('nav, [role="navigation"], [role="banner"], [role="complementary"]')) continue;
-
-            // Find username from this container
-            let username = '';
-            const profileLinks = container.querySelectorAll('a[href*="/@"]');
-            for (const link of profileLinks) {
-                const href = link.getAttribute('href') || '';
-                // Skip post links, only get profile links
-                if (href.includes('/post/')) continue;
-                const m = href.match(/\/@([^/]+)/);
-                if (m) { username = m[1]; break; }
-            }
-
-            // Get text elements within this container
-            const textEls = container.querySelectorAll('span[dir="auto"], div[dir="auto"]');
-            const textParts = [];
-
-            for (const el of textEls) {
-                const text = (el.innerText || el.textContent || '').trim();
-                if (!text || text.length < 2) continue;
-
-                // Skip if inside a nested pressable container (child comment)
-                const closestContainer = el.closest('[data-pressable-container]');
-                if (closestContainer !== container) continue;
-
-                const textLower = text.toLowerCase();
-
-                // Skip blacklisted UI text
-                if (UI_BLACKLIST.has(textLower)) continue;
-
-                // Skip pattern matches
-                let skip = false;
-                for (const pattern of SKIP_PATTERNS) {
-                    if (pattern.test(text)) { skip = true; break; }
-                }
-                if (skip) continue;
-
-                // Skip if text is just the username (display name or handle)
-                if (username && (textLower === username.toLowerCase() || text === username)) continue;
-
-                // Skip very short text that looks like a username (no spaces, alphanumeric + dots/underscores)
-                if (text.length < 25 && /^[a-zA-Z0-9._]+$/.test(text)) continue;
-
-                // Skip link preview titles (usually short, inside link elements)
-                const parentLink = el.closest('a');
-                if (parentLink) {
-                    const linkHref = parentLink.getAttribute('href') || '';
-                    if (linkHref.includes('/@') && !linkHref.includes('/post/')) continue; // profile link
-                    // If it's an external link preview, skip short text
-                    if (linkHref.startsWith('http') && text.length < 40 && !text.includes(' ')) continue;
-                    // Skip link card titles — short text inside external links (e.g. "Suci Viarani", "Ahmad Hartaji")
-                    if (linkHref.startsWith('http') && !linkHref.includes('threads.net') && !linkHref.includes('threads.com') && text.length < 50) continue;
-                }
-
-                // Skip text that looks like a link preview card title
-                // (appears right after a URL in the same container, typically a channel/page name)
-                const parentEl = el.parentElement;
-                if (parentEl) {
-                    // Check if this element is inside a link preview card (div with specific structure)
-                    const cardParent = el.closest('[role="link"], [data-link-preview], a[href^="http"]');
-                    if (cardParent) {
-                        const cardHref = cardParent.getAttribute('href') || '';
-                        if (cardHref && !cardHref.includes('threads.net') && !cardHref.includes('threads.com')) continue;
-                    }
-                }
-
-                // Skip "Terjemahkan" suffix — it's a translate button
-                const cleanText = text.replace(/\s*Terjemahkan\s*$/i, '').trim();
-                if (!cleanText) continue;
-
-                textParts.push(cleanText);
-            }
-
-            // Merge text parts into a single comment (handles multi-paragraph)
-            if (textParts.length === 0) continue;
-
-            // Post-process: remove trailing link preview titles
-            // These are typically short capitalized names at the end (channel/page names)
-            while (textParts.length > 1) {
-                const lastPart = textParts[textParts.length - 1];
-                // Link preview title pattern: short (< 30 chars), title-cased or all caps,
-                // no common sentence endings, looks like a name/brand
-                const isLikelyTitle = lastPart.length < 35 &&
-                    !lastPart.includes('😭') && !lastPart.includes('😅') && !lastPart.includes('🤭') &&
-                    /^[A-Z\u00C0-\u024F]/.test(lastPart) &&
-                    !lastPart.endsWith('.') && !lastPart.endsWith('!') && !lastPart.endsWith('?') &&
-                    !lastPart.includes(' aku ') && !lastPart.includes(' saya ') &&
-                    !lastPart.includes(' kak') && !lastPart.includes(' ka ') &&
-                    // Looks like a proper name (2-4 words, each capitalized)
-                    /^([A-Z][a-zA-Z0-9]*[\s]?){1,4}$/.test(lastPart);
-                if (isLikelyTitle) {
-                    textParts.pop();
-                } else {
-                    break;
-                }
-            }
-
-            const fullText = textParts.join('\n').trim();
-
-            if (!fullText || fullText.length < 3) continue;
-            if (seen.has(fullText)) continue;
-
-            // Final validation: must have username OR be substantial text
-            if (!username && fullText.length < 15) continue;
-
-            seen.add(fullText);
-            comments.push({ text: fullText, username, published_on: null, like_count: 0 });
-        }
-
-        return comments;
-    }
-
-    function downloadSingleJSON() {
-        if (!singlePostData) return;
-        const json = JSON.stringify(singlePostData, null, 2);
-        const blob = new Blob([json], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-
-        const code = window.location.pathname.match(/\/post\/([^/]+)/) || window.location.pathname.match(/\/t\/([^/]+)/);
-        const postCode = code ? code[1] : 'post';
-        const postUsername = singlePostData.original_post?.username || 'unknown';
-        const dateStr = new Date().toISOString().slice(0, 10);
-        const filename = `${postUsername}_${postCode}_comments_${dateStr}.json`;
-
-        const a = document.createElement('a');
-        a.href = url; a.download = filename;
-        document.body.appendChild(a); a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        log(`💾 ${filename}`);
-    }
-
-    function downloadSingleMarkdown() {
-        if (!singlePostData) return;
-        const { original_post, comments } = singlePostData;
-
-        let md = `# Thread Discussion\n\n`;
-        md += `> Scraped on ${new Date().toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' })}\n`;
-        md += `> ${comments.length} comments`;
-        if (singlePostData.total_replies) md += `, ${singlePostData.total_replies} replies`;
-        md += `\n\n`;
-
-        if (original_post) {
-            md += `## Original Post by @${original_post.username}\n\n`;
-            md += `${original_post.text || '*(media only)*'}\n\n`;
-            if (original_post.like_count) md += `❤️ ${original_post.like_count} likes\n\n`;
-            md += `---\n\n`;
-        }
-
-        // Only include comments with valid username and text
-        const validComments = comments.filter(c => c.username && c.text && c.text.trim().length > 0);
-
-        md += `## Comments (${validComments.length})\n\n`;
-
-        for (const c of validComments) {
-            md += `**@${c.username}**`;
-            if (c.published_on) {
-                const date = new Date(c.published_on * 1000).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
-                md += ` · ${date}`;
-            }
-            md += `\n`;
-            md += `${c.text}\n`;
-            if (c.like_count) md += `❤️ ${c.like_count}`;
-            md += `\n`;
-
-            // Render nested replies
-            if (c.replies && c.replies.length > 0) {
-                md += `\n`;
-                for (const r of c.replies) {
-                    if (!r.username || !r.text) continue;
-                    md += `> **@${r.username}**`;
-                    if (r.published_on) {
-                        const rDate = new Date(r.published_on * 1000).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
-                        md += ` · ${rDate}`;
-                    }
-                    md += `\n`;
-                    // Indent reply text with blockquote
-                    const replyLines = r.text.split('\n');
-                    for (const line of replyLines) {
-                        md += `> ${line}\n`;
-                    }
-                    if (r.like_count) md += `> ❤️ ${r.like_count}\n`;
-                    md += `>\n`;
-                }
-            }
-
-            md += `\n---\n\n`;
-        }
-
-        md += `\n🔗 [Open thread](${singlePostData.url})\n`;
-
-        const blob = new Blob([md], { type: 'text/markdown;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const code = window.location.pathname.match(/\/post\/([^/]+)/) || window.location.pathname.match(/\/t\/([^/]+)/);
-        const postCode = code ? code[1] : 'post';
-        const postUsername = singlePostData.original_post?.username || 'unknown';
-        const dateStr = new Date().toISOString().slice(0, 10);
-        const filename = `${postUsername}_${postCode}_comments_${dateStr}.md`;
-
-        const a = document.createElement('a');
-        a.href = url; a.download = filename;
-        document.body.appendChild(a); a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        log(`📝 ${filename}`);
-    }
-
     // ==================== INIT ====================
     function init() {
-        if (isSinglePostPage()) {
-            createSinglePostPanel();
-        } else {
-            createPanel();
-        }
+        createPanel();
     }
 
     setTimeout(init, 2000);
