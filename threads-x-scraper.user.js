@@ -1,13 +1,15 @@
 // ==UserScript==
-// @name         Threads Full Post Scraper (DOM)
+// @name         Threads & X Full Post Scraper (DOM)
 // @namespace    https://threads.com/
-// @version      4.7.0
-// @description  Scrape semua post + replies user Threads via DOM parsing. Filter Shopee affiliate, batas/rentang tanggal, pause/resume + auto-save progress. Zero setup, no ad blocker issues.
+// @version      1.0.0
+// @description  Scrape semua post + replies user Threads atau X/Twitter via DOM parsing. Filter Shopee affiliate, batas/rentang tanggal, pause/resume + auto-save progress. Zero setup, no ad blocker issues.
 // @author       Yusuf Siddiq
 // @match        https://www.threads.net/@*
 // @match        https://www.threads.com/@*
 // @match        https://threads.net/@*
 // @match        https://threads.com/@*
+// @match        https://twitter.com/*
+// @match        https://x.com/*
 // @icon         https://www.threads.net/favicon.ico
 // @grant        GM_addStyle
 // @grant        GM_setValue
@@ -19,11 +21,14 @@
 (function () {
     'use strict';
 
+    // ==================== PLATFORM DETECTION ====================
+    const PLATFORM = /threads\.(net|com)$/.test(window.location.hostname) ? 'threads' : 'x';
+
     // ==================== CONFIG ====================
     const CONFIG = {
         scrollDelay: 1800,
         maxNoNew: 12,
-        version: '4.7.0',
+        version: '1.0.0',
     };
 
     // Keyword/domain yang menandakan link Shopee affiliate
@@ -38,7 +43,7 @@
         /shopee\.co\.id\/[^\s"]*\?[^\s"]*(af_|utm_source=an_|smtt=|pid=)/i,
     ];
 
-    // ==================== STYLES (Updated for latest Threads design) ====================
+    // ==================== STYLES ====================
     GM_addStyle(`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
 
@@ -61,18 +66,9 @@
             overflow-y: auto;
         }
 
-        #ts-panel::-webkit-scrollbar {
-            width: 6px;
-        }
-
-        #ts-panel::-webkit-scrollbar-track {
-            background: transparent;
-        }
-
-        #ts-panel::-webkit-scrollbar-thumb {
-            background: #404040;
-            border-radius: 3px;
-        }
+        #ts-panel::-webkit-scrollbar { width: 6px; }
+        #ts-panel::-webkit-scrollbar-track { background: transparent; }
+        #ts-panel::-webkit-scrollbar-thumb { background: #404040; border-radius: 3px; }
 
         #ts-panel .ts-header {
             display: flex;
@@ -117,15 +113,9 @@
             font-size: 16px;
         }
 
-        #ts-panel .close-btn:hover {
-            background: #1a1a1a;
-            color: #ffffff;
-            border-color: #3a3a3a;
-        }
+        #ts-panel .close-btn:hover { background: #1a1a1a; color: #ffffff; border-color: #3a3a3a; }
 
-        #ts-panel .ts-section {
-            margin-bottom: 12px;
-        }
+        #ts-panel .ts-section { margin-bottom: 12px; }
 
         #ts-panel .ts-label {
             display: block;
@@ -149,13 +139,8 @@
             outline: none;
         }
 
-        #ts-panel .ts-input:focus {
-            border-color: #3a3a3a;
-        }
-
-        #ts-panel select.ts-input {
-            cursor: pointer;
-        }
+        #ts-panel .ts-input:focus { border-color: #3a3a3a; }
+        #ts-panel select.ts-input { cursor: pointer; }
 
         #ts-panel .ts-switch {
             display: flex;
@@ -171,15 +156,8 @@
             transition: border-color 0.15s ease;
         }
 
-        #ts-panel .ts-switch:hover {
-            border-color: #3a3a3a;
-        }
-
-        #ts-panel .ts-switch-label {
-            font-size: 13px;
-            color: #ffffff;
-            font-weight: 500;
-        }
+        #ts-panel .ts-switch:hover { border-color: #3a3a3a; }
+        #ts-panel .ts-switch-label { font-size: 13px; color: #ffffff; font-weight: 500; }
 
         #ts-panel .ts-toggle {
             position: relative;
@@ -191,9 +169,7 @@
             cursor: pointer;
         }
 
-        #ts-panel .ts-toggle.active {
-            background: #0a0a0a;
-        }
+        #ts-panel .ts-toggle.active { background: #0a0a0a; }
 
         #ts-panel .ts-toggle::after {
             content: '';
@@ -207,22 +183,10 @@
             transition: all 0.2s ease;
         }
 
-        #ts-panel .ts-toggle.active::after {
-            left: 18px;
-            background: #ffffff;
-        }
+        #ts-panel .ts-toggle.active::after { left: 18px; background: #ffffff; }
 
-        #ts-panel .ts-actions {
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-            margin-bottom: 12px;
-        }
-
-        #ts-panel .ts-btn-wrap {
-            position: relative;
-            width: 100%;
-        }
+        #ts-panel .ts-actions { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+        #ts-panel .ts-btn-wrap { position: relative; width: 100%; }
 
         #ts-panel .btn {
             position: relative;
@@ -246,44 +210,37 @@
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            width: 16px;
-            height: 16px;
-            margin-left: 6px;
+            width: 14px;
+            height: 14px;
+            margin-left: 4px;
             border-radius: 50%;
             background: #2a2a2a;
-            border: 1.5px solid #404040;
-            color: #a0a0a0;
-            font-size: 10px;
-            cursor: help;
+            border: 1px solid #3a3a3a;
+            color: #808080;
+            font-size: 9px;
+            cursor: pointer;
             flex-shrink: 0;
             user-select: none;
             font-weight: 700;
-            transition: all 0.15s ease;
         }
 
-        #ts-panel .ts-info:hover, #ts-panel .ts-info:active {
-            background: #3a3a3a;
-            color: #ffffff;
-            border-color: #505050;
-        }
+        #ts-panel .ts-info:hover { background: #3a3a3a; color: #ffffff; }
 
         #ts-tip {
             position: fixed;
-            max-width: 280px;
+            max-width: 240px;
             background: #1a1a1a;
             border: 1px solid #3a3a3a;
             color: #e0e0e0;
             font-family: inherit;
-            font-size: 12px;
-            line-height: 1.6;
-            padding: 12px;
-            border-radius: 8px;
-            box-shadow: 0 12px 32px rgba(0,0,0,0.9);
+            font-size: 11px;
+            line-height: 1.5;
+            padding: 10px;
+            border-radius: 6px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.8);
             z-index: 2147483647;
             display: none;
             white-space: pre-line;
-            word-break: break-word;
-            pointer-events: none;
         }
 
         #ts-panel .btn:hover:not(:disabled) { transform: translateY(-1px); }
@@ -340,12 +297,7 @@
 
         #ts-panel .ts-fresh-link:hover { color: #ffffff; }
 
-        #ts-panel .ts-stats {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 6px;
-            margin-bottom: 12px;
-        }
+        #ts-panel .ts-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 12px; }
 
         #ts-panel .ts-stat {
             padding: 10px;
@@ -355,17 +307,8 @@
             text-align: center;
         }
 
-        #ts-panel .ts-stat-value {
-            font-size: 18px;
-            font-weight: 600;
-            color: #ffffff;
-        }
-
-        #ts-panel .ts-stat-label {
-            font-size: 11px;
-            color: #808080;
-            margin-top: 2px;
-        }
+        #ts-panel .ts-stat-value { font-size: 18px; font-weight: 600; color: #ffffff; }
+        #ts-panel .ts-stat-label { font-size: 11px; color: #808080; margin-top: 2px; }
 
         #ts-panel .ts-log {
             padding: 10px;
@@ -384,12 +327,7 @@
         #ts-panel .ts-log::-webkit-scrollbar-track { background: transparent; }
         #ts-panel .ts-log::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 2px; }
 
-        #ts-panel .ts-log .log-entry {
-            padding: 2px 0;
-            border-bottom: 1px solid #1a1a1a;
-            word-break: break-word;
-        }
-
+        #ts-panel .ts-log .log-entry { padding: 2px 0; border-bottom: 1px solid #1a1a1a; word-break: break-word; }
         #ts-panel .ts-log .log-entry:last-child { border-bottom: none; }
         #ts-panel .ts-log .log-time { color: #505050; margin-right: 6px; }
     `);
@@ -404,14 +342,23 @@
     let currentUsername = '';
     let currentSettingsSignature = '';
 
-    // ==================== PERSISTENCE ====================
+    // ==================== PLATFORM HELPERS ====================
     function getProfileUsername() {
-        const m = window.location.pathname.match(/^\/@([^/]+)/);
-        return m ? m[1] : '';
+        if (PLATFORM === 'threads') {
+            const m = window.location.pathname.match(/^\/@([^/]+)/);
+            return m ? m[1] : '';
+        }
+        const m = window.location.pathname.match(/^\/([^/]+)/);
+        if (!m) return '';
+        const reserved = ['home', 'explore', 'notifications', 'messages', 'i', 'search', 'settings', 'compose'];
+        const name = m[1];
+        if (reserved.includes(name.toLowerCase())) return '';
+        return name;
     }
 
+    // ==================== PERSISTENCE ====================
     function getStorageKey(username) {
-        return `ts_progress_${window.location.hostname}_${username}`;
+        return `ts_progress_${PLATFORM}_${window.location.hostname}_${username}`;
     }
 
     function saveProgress(username, settingsSignature) {
@@ -602,7 +549,7 @@
         if (tipEl) { tipEl.style.display = 'none'; tipEl._owner = null; }
     }
 
-    function wireInfoIcon(labelEl, sourceEl, opts = {}) {
+    function wireInfoIcon(labelEl, sourceEl) {
         if (!labelEl || !sourceEl) return;
         const text = sourceEl.getAttribute('title');
         if (!text) return;
@@ -639,10 +586,22 @@
         if (document.getElementById('ts-panel')) return;
         const panel = document.createElement('div');
         panel.id = 'ts-panel';
+        const platformLabel = PLATFORM === 'threads' ? 'Threads Scraper' : 'X Scraper';
+        const deepModeRow = PLATFORM === 'threads' ? `
+            <div class="ts-switch" id="ts-switch-deep" title="Buka setiap post dan scrape comments-nya juga. Jauh lebih lambat.">
+                <span class="ts-switch-label">Deep mode</span>
+                <div class="ts-toggle" id="ts-toggle-deep"></div>
+            </div>` : '';
+        const skipRetweetsRow = PLATFORM === 'x' ? `
+            <div class="ts-switch" id="ts-switch-media" title="Skip retweet (RT) murni tanpa komentar, hanya ambil tweet/quote asli akun ini.">
+                <span class="ts-switch-label">Skip pure retweets</span>
+                <div class="ts-toggle ts-toggle-active" id="ts-toggle-media"></div>
+            </div>` : '';
+
         panel.innerHTML = `
             <div class="ts-header">
                 <div class="ts-title">
-                    <span>Threads Scraper</span>
+                    <span>${platformLabel}</span>
                     <span class="ts-badge">v${CONFIG.version}</span>
                 </div>
                 <button class="close-btn" id="ts-x" title="Close panel">✕</button>
@@ -652,42 +611,39 @@
 
             <div class="ts-section">
                 <label class="ts-label">Scroll delay (ms)</label>
-                <input type="number" class="ts-input" id="ts-delay" value="${CONFIG.scrollDelay}" min="500" step="100" title="Jeda antar scroll saat scraping. Lebih besar = lebih stabil (text & gambar sempat load penuh), lebih kecil = lebih cepat tapi risiko ada post yang terlewat.">
+                <input type="number" class="ts-input" id="ts-delay" value="${CONFIG.scrollDelay}" min="500" step="100" title="Delay antar scroll. Lebih besar = lebih stabil, lebih kecil = lebih cepat.">
             </div>
 
             <div class="ts-section">
-                <label class="ts-label">Batas waktu</label>
-                <select class="ts-input" id="ts-date-limit" title="Batasi seberapa jauh scraper mundur ke belakang. Begitu ketemu beberapa post berturut-turut yang lebih tua dari batas ini, scraper otomatis berhenti scroll.">
-                    <option value="0">Semua waktu</option>
-                    <option value="1">1 bulan terakhir</option>
-                    <option value="3">3 bulan terakhir</option>
-                    <option value="6" selected>6 bulan terakhir</option>
-                    <option value="12">12 bulan terakhir</option>
-                    <option value="custom">Rentang custom</option>
+                <label class="ts-label">Time limit</label>
+                <select class="ts-input" id="ts-date-limit" title="Batasi seberapa jauh mundur ke belakang saat scraping.">
+                    <option value="0">All time</option>
+                    <option value="1">1 month</option>
+                    <option value="3">3 months</option>
+                    <option value="6" selected>6 months</option>
+                    <option value="12">12 months</option>
+                    <option value="custom">Custom range</option>
                 </select>
             </div>
 
             <div class="ts-section" id="ts-custom-range" style="display:none;">
-                <label class="ts-label">Dari tanggal</label>
-                <input type="date" class="ts-input" id="ts-date-from" title="Post yang lebih lama dari tanggal ini nggak akan disimpan — scraper berhenti begitu mentok di sini. Kosongkan kalau nggak ada batas bawah.">
-                <label class="ts-label" style="margin-top:8px;">Sampai tanggal</label>
-                <input type="date" class="ts-input" id="ts-date-to" title="Post yang lebih baru dari tanggal ini di-skip (tetap discroll lewatin, nggak disimpan) sampai ketemu post yang masuk rentang. Kosongkan kalau mau mulai dari yang paling baru.">
+                <label class="ts-label">From date</label>
+                <input type="date" class="ts-input" id="ts-date-from" title="Post lebih lama dari ini tidak disimpan.">
+                <label class="ts-label" style="margin-top:8px;">To date</label>
+                <input type="date" class="ts-input" id="ts-date-to" title="Post lebih baru dari ini di-skip sampai masuk rentang.">
             </div>
 
-            <div class="ts-switch" id="ts-switch-replies" title="Tab 'Replies' di profil = balasan yang DIBUAT oleh akun ini di thread milik orang lain (bukan balasan yang diterima di post akun ini). Aktifkan cuma kalau butuh riset gaya komentar/interaksi akun ini di thread orang. Buat riset konten dari thread milik akun ini sendiri, biarkan mati (default).">
-                <span class="ts-switch-label">Include replies tab</span>
+            <div class="ts-switch" id="ts-switch-replies" title="Include replies dari akun ini.">
+                <span class="ts-switch-label">Include replies</span>
                 <div class="ts-toggle" id="ts-toggle-replies"></div>
             </div>
 
-            <div class="ts-switch" id="ts-switch-shopee" title="Kalau aktif, tiap thread yang lolos scroll akan dicek isi lengkapnya (semua segmen utas oleh author yang sama) — cuma yang salah satu bagiannya ada link Shopee affiliate (s.shopee.co.id, shp.ee, dll) yang disimpan, dan teks yang disimpan adalah utas UTUH, bukan cuma bagian yang ada linknya. Lebih lambat karena tiap thread di-fetch satu-satu.">
-                <span class="ts-switch-label">Shopee affiliate only</span>
+            <div class="ts-switch" id="ts-switch-shopee" title="Hanya simpan post/tweet yang ada link Shopee affiliate.">
+                <span class="ts-switch-label">Shopee filter</span>
                 <div class="ts-toggle" id="ts-toggle-shopee"></div>
             </div>
-
-            <div class="ts-switch" id="ts-switch-deep" title="Buka tiap post satu-satu dan scrape balasan/komentarnya juga (bukan cuma caption post-nya). Jauh lebih lambat karena ada request per post. Aktifkan kalau butuh data percakapan/komentar, bukan cuma isi thread-nya.">
-                <span class="ts-switch-label">Deep mode (scrape comments)</span>
-                <div class="ts-toggle" id="ts-toggle-deep"></div>
-            </div>
+            ${skipRetweetsRow}
+            ${deepModeRow}
 
             <div class="ts-stats" id="ts-stats" style="display:none;">
                 <div class="ts-stat">
@@ -702,33 +658,33 @@
 
             <div class="ts-actions">
                 <div class="ts-btn-wrap">
-                    <button class="btn btn-go" id="ts-go" title="Mulai scrape dari atas profil ini, sesuai pengaturan delay/batas waktu/toggle di atas. Kalau ada progress tersimpan dari sesi sebelumnya, tombol ini otomatis jadi 'Lanjutkan'.">
+                    <button class="btn btn-go" id="ts-go" title="Start scraping">
                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="6 3 20 12 6 21 6 3"/></svg>
-                        <span class="ts-go-label">Start Scraping</span>
+                        <span class="ts-go-label">Start</span>
                     </button>
                 </div>
                 <div class="ts-btn-wrap">
-                    <button class="btn btn-pause" id="ts-pause" disabled title="Jeda proses scraping tanpa kehilangan progress — nggak scroll/fetch selama dijeda. Klik lagi (jadi 'Lanjutkan') buat terusin dari titik yang sama.">
+                    <button class="btn btn-pause" id="ts-pause" disabled>
                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>Pause
                     </button>
                 </div>
                 <div class="ts-btn-wrap">
-                    <button class="btn btn-stop" id="ts-stop" disabled title="Hentikan proses scrape sepenuhnya. Data yang sudah kekumpul tetap tersimpan dan bisa didownload atau dilanjutkan lagi nanti (klik Start jadi 'Lanjutkan').">
+                    <button class="btn btn-stop" id="ts-stop" disabled>
                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>Stop
                     </button>
                 </div>
                 <div class="ts-btn-wrap">
-                    <button class="btn btn-dl" id="ts-dl" disabled title="Data terstruktur (array objek) lengkap dengan semua field: text, time, like_count, images, has_shopee_link, dst. Cocok diolah lagi pakai kode/script, atau diupload sebagai referensi mentah ke Claude project/knowledge base.&#10;&#10;Contoh: { 'text': '...', 'like_count': 342, 'time': '2026-05-01...' }">
+                    <button class="btn btn-dl" id="ts-dl" disabled title="Download as JSON">
                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>JSON
                     </button>
                 </div>
                 <div class="ts-btn-wrap">
-                    <button class="btn btn-csv" id="ts-csv" disabled title="Format tabel (kolom: code, username, text, time, like_count, dst). Cocok dibuka di Excel/Google Sheets buat sortir & filter cepat — misal urutkan by like_count buat cari thread paling engaging.&#10;&#10;Kurang cocok buat baca teks utas panjang (kepotong per baris).">
+                    <button class="btn btn-csv" id="ts-csv" disabled title="Download as CSV">
                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>CSV
                     </button>
                 </div>
                 <div class="ts-btn-wrap">
-                    <button class="btn btn-csv" id="ts-md" disabled title="Paling enak dibaca — tiap thread jadi satu blok teks lengkap dengan tanggal & like. Paling cocok buat: cari bahan konten, ambil insight, atau dijadiin knowledge base/referensi gaya nulis buat skill Threads Claude (niru gaya atau dimodif).&#10;&#10;Contoh: ## 1 Mei 2026 (isi utas...) ❤️ 342 likes">
+                    <button class="btn btn-csv" id="ts-md" disabled title="Download as Markdown">
                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>Markdown
                     </button>
                 </div>
@@ -740,21 +696,8 @@
         `;
         document.body.appendChild(panel);
 
-        // Wire info icons untuk semua elemen dengan tooltip
         wireInfoIcon(panel.querySelector('#ts-delay').previousElementSibling, panel.querySelector('#ts-delay'));
         wireInfoIcon(panel.querySelector('#ts-date-limit').previousElementSibling, panel.querySelector('#ts-date-limit'));
-        wireInfoIcon(panel.querySelector('#ts-date-from').previousElementSibling, panel.querySelector('#ts-date-from'));
-        const toDateLabel = Array.from(panel.querySelectorAll('.ts-label')).find(el => el.textContent.trim() === 'To date');
-        if (toDateLabel) wireInfoIcon(toDateLabel, panel.querySelector('#ts-date-to'));
-        wireInfoIcon(panel.querySelector('#ts-switch-replies .ts-switch-label'), panel.querySelector('#ts-switch-replies'));
-        wireInfoIcon(panel.querySelector('#ts-switch-shopee .ts-switch-label'), panel.querySelector('#ts-switch-shopee'));
-        wireInfoIcon(panel.querySelector('#ts-switch-deep .ts-switch-label'), panel.querySelector('#ts-switch-deep'));
-        wireInfoIcon(panel.querySelector('#ts-go').parentElement, panel.querySelector('#ts-go'));
-        wireInfoIcon(panel.querySelector('#ts-pause').parentElement, panel.querySelector('#ts-pause'));
-        wireInfoIcon(panel.querySelector('#ts-stop').parentElement, panel.querySelector('#ts-stop'));
-        wireInfoIcon(panel.querySelector('#ts-dl').parentElement, panel.querySelector('#ts-dl'));
-        wireInfoIcon(panel.querySelector('#ts-csv').parentElement, panel.querySelector('#ts-csv'));
-        wireInfoIcon(panel.querySelector('#ts-md').parentElement, panel.querySelector('#ts-md'));
 
         document.getElementById('ts-x').onclick = () => panel.remove();
         document.getElementById('ts-go').onclick = startScraping;
@@ -783,11 +726,17 @@
         const toggleReplies = document.getElementById('ts-toggle-replies');
         document.getElementById('ts-switch-replies').onclick = () => toggleReplies.classList.toggle('active');
 
-        const toggleDeep = document.getElementById('ts-toggle-deep');
-        document.getElementById('ts-switch-deep').onclick = () => toggleDeep.classList.toggle('active');
-
         const toggleShopee = document.getElementById('ts-toggle-shopee');
         document.getElementById('ts-switch-shopee').onclick = () => toggleShopee.classList.toggle('active');
+
+        if (PLATFORM === 'threads') {
+            const toggleDeep = document.getElementById('ts-toggle-deep');
+            document.getElementById('ts-switch-deep').onclick = () => toggleDeep.classList.toggle('active');
+        } else {
+            const toggleMedia = document.getElementById('ts-toggle-media');
+            toggleMedia.classList.add('active');
+            document.getElementById('ts-switch-media').onclick = () => toggleMedia.classList.toggle('active');
+        }
 
         checkResumableSession();
     }
@@ -827,17 +776,12 @@
         }
     }
 
-    // ==================== DOM EXTRACTION (Improved for latest Threads) ====================
-    function extractPostsFromDOM() {
+    // ==================== DOM EXTRACTION: THREADS ====================
+    function extractPostsFromDOM_Threads() {
         const posts = [];
         const seenCodes = new Set();
 
-        // Primary selectors for latest Threads design
-        const selectors = [
-            'a[href*="/post/"]',          // Direct post links
-            'a[href*="/@"][href*="/post/"]', // Profile + post links
-        ];
-
+        const selectors = ['a[href*="/post/"]', 'a[href*="/@"][href*="/post/"]'];
         const postLinks = document.querySelectorAll(selectors.join(','));
 
         for (const link of postLinks) {
@@ -852,12 +796,10 @@
             let container = null;
             let el = link;
 
-            // Walk up to find the post container
             for (let i = 0; i < 15; i++) {
                 if (!el.parentElement) break;
                 el = el.parentElement;
 
-                // Check for text content
                 const hasTextEl = el.querySelector('[dir="auto"] span, [role="button"] span');
                 if (!hasTextEl) continue;
 
@@ -869,7 +811,6 @@
 
             if (!container) continue;
 
-            // === TEXT EXTRACTION ===
             let text = '';
             const textEls = container.querySelectorAll('[dir="auto"]');
             const candidates = [];
@@ -877,12 +818,8 @@
             for (const tel of textEls) {
                 let t = (tel.innerText || tel.textContent || '').trim();
                 if (t.length < 3 || t.length > 5000) continue;
-
-                // Skip timestamps
                 if (/^\d+[smhdw]$|^\d+\s*(jam|menit|hari|detik)/.test(t)) continue;
-                // Skip UI labels
                 if (/^(Follow|Ikuti|More|Lainnya|Like|Suka|Reply|Balas|Share)$/i.test(t)) continue;
-
                 candidates.push(t);
             }
 
@@ -890,14 +827,12 @@
                 text = candidates.reduce((a, b) => a.length >= b.length ? a : b, '');
             }
 
-            // === TIME ===
             let timeText = '';
             const timeEl = container.querySelector('time');
             if (timeEl) {
                 timeText = timeEl.getAttribute('datetime') || timeEl.textContent || '';
             }
 
-            // === LIKES ===
             let likeCount = 0;
             const ariaEls = container.querySelectorAll('[aria-label*="like" i], [aria-label*="suka" i]');
             for (const ael of ariaEls) {
@@ -906,11 +841,9 @@
                 if (m) { likeCount = parseInt(m[1].replace(/[.,]/g, '')); break; }
             }
 
-            // === USERNAME ===
             const userMatch = href.match(/\/@([^/]+)/);
             const username = userMatch ? userMatch[1] : '';
 
-            // === IMAGES ===
             const images = [];
             const imgs = container.querySelectorAll('img');
             for (const img of imgs) {
@@ -922,7 +855,6 @@
                 }
             }
 
-            // === VIDEO ===
             const hasVideo = container.querySelector('video') !== null;
 
             posts.push({
@@ -941,40 +873,34 @@
         return posts;
     }
 
-    // ==================== SCROLL & WAIT ====================
-    function sleep(ms) {
-        return new Promise(r => setTimeout(r, ms));
-    }
-
-    async function scrollAndWait(delay) {
-        const prev = document.body.scrollHeight;
-        window.scrollBy(0, window.innerHeight * 0.6);
-        await sleep(delay);
-        if (document.body.scrollHeight > prev) return true;
-        window.scrollTo(0, document.body.scrollHeight);
-        await sleep(1500);
-        return document.body.scrollHeight > prev;
-    }
-
-    // ==================== SHOPEE FILTER ====================
-    function itemHasShopeeLink(item) {
-        try {
-            const str = JSON.stringify(item);
-            return SHOPEE_LINK_PATTERNS.some(p => p.test(str));
-        } catch (e) {
-            return false;
+    function findRepliesTab_Threads() {
+        const tabs = document.querySelectorAll('[role="tab"]');
+        for (const tab of tabs) {
+            if (/replies|balasan/i.test(tab.textContent)) return tab;
         }
+        return null;
     }
 
-    async function fetchFullThreadInfo(postUrl, authorUsername) {
+    function findNestedKey(obj, key) {
+        const results = [];
+        function search(o) {
+            if (!o || typeof o !== 'object') return;
+            if (Array.isArray(o)) { for (const item of o) search(item); return; }
+            for (const [k, v] of Object.entries(o)) {
+                if (k === key) results.push(v);
+                else search(v);
+            }
+        }
+        search(obj);
+        return results;
+    }
+
+    async function fetchFullThreadInfo_Threads(postUrl, authorUsername) {
         if (!postUrl || !authorUsername) return null;
         const result = { fullText: '', hasShopeeLink: false };
 
         try {
-            const resp = await fetch(postUrl, {
-                headers: { 'Accept': 'text/html' },
-                credentials: 'include',
-            });
+            const resp = await fetch(postUrl, { headers: { 'Accept': 'text/html' }, credentials: 'include' });
             if (!resp.ok) return null;
 
             const html = await resp.text();
@@ -1020,6 +946,141 @@
         return result;
     }
 
+    // ==================== DOM EXTRACTION: X/TWITTER ====================
+    function extractPostsFromDOM_X(profileUsername) {
+        const posts = [];
+        const articles = document.querySelectorAll('article[data-testid="tweet"]');
+
+        for (const article of articles) {
+            const timeEl = article.querySelector('time');
+            let statusLink = null;
+            if (timeEl) {
+                statusLink = timeEl.closest('a[href*="/status/"]');
+            }
+            if (!statusLink) {
+                const links = article.querySelectorAll('a[href*="/status/"]');
+                for (const l of links) {
+                    if (/\/status\/\d+$/.test(l.getAttribute('href') || '')) { statusLink = l; break; }
+                }
+            }
+            if (!statusLink) continue;
+
+            const href = statusLink.getAttribute('href') || '';
+            const match = href.match(/^\/([^/]+)\/status\/(\d+)/);
+            if (!match) continue;
+            const tweetUsername = match[1];
+            const code = match[2];
+            if (!code) continue;
+
+            let isPureRetweet = false;
+            const socialContext = article.querySelector('[data-testid="socialContext"]');
+            if (socialContext && /repost|retweet|reposted/i.test(socialContext.textContent || '')) {
+                isPureRetweet = true;
+            }
+
+            if (profileUsername && tweetUsername.toLowerCase() !== profileUsername.toLowerCase()) {
+                continue;
+            }
+
+            let text = '';
+            const textEl = article.querySelector('[data-testid="tweetText"]');
+            if (textEl) {
+                text = (textEl.innerText || textEl.textContent || '').trim();
+            }
+
+            let timeText = '';
+            if (timeEl) {
+                timeText = timeEl.getAttribute('datetime') || timeEl.textContent || '';
+            }
+
+            function getMetric(testid) {
+                const el = article.querySelector(`[data-testid="${testid}"]`);
+                if (!el) return 0;
+                const label = el.getAttribute('aria-label') || el.textContent || '';
+                const m = label.match(/([\d.,]+)/);
+                if (!m) return 0;
+                let numStr = m[1].replace(/,/g, '');
+                let mult = 1;
+                if (/K$/i.test(label)) mult = 1000;
+                if (/M$/i.test(label)) mult = 1000000;
+                const num = parseFloat(numStr.replace(/[^\d.]/g, ''));
+                return isNaN(num) ? 0 : Math.round(num * mult);
+            }
+            const likeCount = getMetric('like');
+            const retweetCount = getMetric('retweet');
+            const replyCount = getMetric('reply');
+
+            const images = [];
+            const imgs = article.querySelectorAll('[data-testid="tweetPhoto"] img, div[aria-label="Image"] img');
+            for (const img of imgs) {
+                const src = img.src || img.currentSrc || '';
+                if (src && src.includes('pbs.twimg.com')) images.push(src.split('?')[0] + '?format=jpg&name=large');
+            }
+
+            const hasVideo = article.querySelector('[data-testid="videoPlayer"], video') !== null;
+
+            const hasQuote = article.querySelector('[role="link"][tabindex="0"] time') !== null &&
+                article.querySelectorAll('time').length > 1;
+
+            const linkEls = article.querySelectorAll('[data-testid="tweetText"] a, [data-testid="card.wrapper"] a');
+            const links = Array.from(linkEls).map(a => a.href).filter(Boolean);
+
+            posts.push({
+                code,
+                text,
+                username: tweetUsername,
+                time: timeText,
+                like_count: likeCount,
+                retweet_count: retweetCount,
+                reply_count: replyCount,
+                images: [...new Set(images)],
+                has_video: hasVideo,
+                has_quote: hasQuote,
+                is_retweet: isPureRetweet,
+                links,
+                has_shopee_link: false,
+                url: `https://x.com/${tweetUsername}/status/${code}`,
+            });
+        }
+
+        return posts;
+    }
+
+    function navigateToProfileTab_X(username, tab) {
+        const base = `https://x.com/${username}`;
+        const target = tab === 'posts' ? base : `${base}/${tab}`;
+        const current = window.location.pathname.replace(/\/$/, '');
+        const targetPath = new URL(target).pathname.replace(/\/$/, '');
+        if (current !== targetPath) {
+            window.location.href = target;
+        }
+    }
+
+    // ==================== SCROLL & WAIT ====================
+    function sleep(ms) {
+        return new Promise(r => setTimeout(r, ms));
+    }
+
+    async function scrollAndWait(delay) {
+        const prev = document.body.scrollHeight;
+        window.scrollBy(0, window.innerHeight * 0.6);
+        await sleep(delay);
+        if (document.body.scrollHeight > prev) return true;
+        window.scrollTo(0, document.body.scrollHeight);
+        await sleep(1500);
+        return document.body.scrollHeight > prev;
+    }
+
+    // ==================== SHOPEE FILTER ====================
+    function itemHasShopeeLink(item) {
+        try {
+            const str = JSON.stringify(item);
+            return SHOPEE_LINK_PATTERNS.some(p => p.test(str));
+        } catch (e) {
+            return false;
+        }
+    }
+
     // ==================== MAIN SCRAPING ====================
     async function startScraping() {
         if (isRunning) return;
@@ -1032,6 +1093,13 @@
         const isResume = goBtn.dataset.resume === '1';
         const username = getProfileUsername();
         currentUsername = username;
+
+        if (!username) {
+            log('⚠️ Buka halaman profil dulu');
+            isRunning = false;
+            setBtns('idle');
+            return;
+        }
 
         const existingFreshLink = document.querySelector('.ts-fresh-link');
         if (existingFreshLink) existingFreshLink.remove();
@@ -1051,8 +1119,9 @@
 
         const delay = parseInt(document.getElementById('ts-delay').value) || CONFIG.scrollDelay;
         const includeReplies = document.getElementById('ts-toggle-replies').classList.contains('active');
-        const deepMode = document.getElementById('ts-toggle-deep').classList.contains('active');
         const shopeeOnly = document.getElementById('ts-toggle-shopee').classList.contains('active');
+        const deepMode = PLATFORM === 'threads' && document.getElementById('ts-toggle-deep')?.classList.contains('active');
+        const skipRetweets = PLATFORM === 'x' && document.getElementById('ts-toggle-media')?.classList.contains('active');
         const { dateFrom, dateTo, dateLabel } = getDateRangeSettings();
         currentSettingsSignature = `${shopeeOnly}|${dateFrom ? dateFrom.toISOString() : ''}|${dateTo ? dateTo.toISOString() : ''}|${includeReplies}`;
 
@@ -1063,29 +1132,38 @@
         setStatus('🟢 Scraping...', 'running');
         await acquireWakeLock();
 
+        if (PLATFORM === 'x') {
+            navigateToProfileTab_X(username, 'posts');
+            await sleep(1500);
+        }
         window.scrollTo(0, 0);
         await sleep(1000);
 
         log('📝 Scraping posts...');
-        let reason = await scrapeCurrentTab(delay, { shopeeOnly, dateFrom, dateTo, settingsSignature: currentSettingsSignature });
+        let reason = await scrapeCurrentTab(delay, { username, shopeeOnly, skipRetweets, dateFrom, dateTo, settingsSignature: currentSettingsSignature });
 
         if (includeReplies && !shouldStop) {
             log('💬 Scraping replies...');
-            const repliesTab = findRepliesTab();
-            if (repliesTab) {
-                repliesTab.click();
-                await sleep(2000);
-                window.scrollTo(0, 0);
-                await sleep(1000);
-                const before = collectedPosts.size;
-                reason = await scrapeCurrentTab(delay, { shopeeOnly, dateFrom, dateTo, settingsSignature: currentSettingsSignature });
-                log(`💬 +${collectedPosts.size - before}`);
+            if (PLATFORM === 'threads') {
+                const repliesTab = findRepliesTab_Threads();
+                if (repliesTab) {
+                    repliesTab.click();
+                    await sleep(2000);
+                }
+            } else {
+                navigateToProfileTab_X(username, 'with_replies');
+                await sleep(1500);
             }
+            window.scrollTo(0, 0);
+            await sleep(1000);
+            const before = collectedPosts.size;
+            reason = await scrapeCurrentTab(delay, { username, shopeeOnly, skipRetweets, dateFrom, dateTo, settingsSignature: currentSettingsSignature });
+            log(`💬 +${collectedPosts.size - before}`);
         }
 
         if (deepMode && !shouldStop) {
             log('🔍 Deep mode...');
-            await scrapeDeepComments(delay);
+            await scrapeDeepComments_Threads(delay);
         }
 
         releaseWakeLock();
@@ -1109,7 +1187,7 @@
     }
 
     async function scrapeCurrentTab(delay, opts = {}) {
-        const { shopeeOnly = false, dateFrom = null, dateTo = null, settingsSignature = '' } = opts;
+        const { username, shopeeOnly = false, skipRetweets = false, dateFrom = null, dateTo = null, settingsSignature = '' } = opts;
         let noNewCount = 0;
         let scrollCount = 0;
         const oldSeenCodes = new Set();
@@ -1121,10 +1199,11 @@
 
             scrollCount++;
             const prevCount = collectedPosts.size;
-            const posts = extractPostsFromDOM();
+            const posts = PLATFORM === 'threads' ? extractPostsFromDOM_Threads() : extractPostsFromDOM_X(username);
 
             for (const p of posts) {
                 if (!p.code) continue;
+                if (PLATFORM === 'x' && skipRetweets && p.is_retweet) continue;
 
                 let postDate = null;
                 if (p.time) {
@@ -1138,15 +1217,25 @@
                     continue;
                 }
 
-                if (shopeeOnly && !checkedShopeeCodes.has(p.code)) {
-                    checkedShopeeCodes.add(p.code);
-                    await waitWhilePausedOrHidden();
-                    if (shouldStop) { reason = 'stopped'; break; }
-                    const info = await fetchFullThreadInfo(p.url, p.username);
-                    await sleep(300 + Math.random() * 300);
-                    if (!info || !info.hasShopeeLink) continue;
-                    if (info.fullText) p.text = info.fullText;
-                    p.has_shopee_link = true;
+                if (shopeeOnly) {
+                    if (!checkedShopeeCodes.has(p.code)) {
+                        checkedShopeeCodes.add(p.code);
+                        await waitWhilePausedOrHidden();
+                        if (shouldStop) { reason = 'stopped'; break; }
+
+                        if (PLATFORM === 'threads') {
+                            const info = await fetchFullThreadInfo_Threads(p.url, p.username);
+                            await sleep(300 + Math.random() * 300);
+                            if (!info || !info.hasShopeeLink) continue;
+                            if (info.fullText) p.text = info.fullText;
+                            p.has_shopee_link = true;
+                        } else {
+                            if (!itemHasShopeeLink(p)) continue;
+                            p.has_shopee_link = true;
+                        }
+                    } else if (!p.has_shopee_link) {
+                        continue;
+                    }
                 }
 
                 const existing = collectedPosts.get(p.code);
@@ -1155,6 +1244,8 @@
                 } else {
                     if (p.text && (!existing.text || p.text.length > existing.text.length)) existing.text = p.text;
                     if (p.like_count && !existing.like_count) existing.like_count = p.like_count;
+                    if (p.retweet_count && !existing.retweet_count) existing.retweet_count = p.retweet_count;
+                    if (p.reply_count && !existing.reply_count) existing.reply_count = p.reply_count;
                     if (p.time && !existing.time) existing.time = p.time;
                     if (p.images.length && !existing.images.length) existing.images = p.images;
                     if (p.has_video && !existing.has_video) existing.has_video = p.has_video;
@@ -1196,40 +1287,9 @@
         return reason;
     }
 
-    // ==================== HELPER FUNCTIONS ====================
-    function findRepliesTab() {
-        const tabs = document.querySelectorAll('[role="tab"]');
-        for (const tab of tabs) {
-            if (/replies|balasan/i.test(tab.textContent)) return tab;
-        }
-        return null;
-    }
-
-    function findThreadsTab() {
-        const tabs = document.querySelectorAll('[role="tab"]');
-        for (const tab of tabs) {
-            if (/thread|post/i.test(tab.textContent)) return tab;
-        }
-        return null;
-    }
-
-    function findNestedKey(obj, key) {
-        const results = [];
-        function search(o) {
-            if (!o || typeof o !== 'object') return;
-            if (Array.isArray(o)) { for (const item of o) search(item); return; }
-            for (const [k, v] of Object.entries(o)) {
-                if (k === key) results.push(v);
-                else search(v);
-            }
-        }
-        search(obj);
-        return results;
-    }
-
-    // ==================== DEEP MODE ====================
-    async function scrapeDeepComments(delay) {
-        const posts = Array.from(collectedPosts.values()).slice(0, 20); // Limit to first 20
+    // ==================== DEEP MODE (THREADS ONLY) ====================
+    async function scrapeDeepComments_Threads(delay) {
+        const posts = Array.from(collectedPosts.values()).slice(0, 20);
         let completed = 0;
 
         for (const post of posts) {
@@ -1249,6 +1309,7 @@
         const username = getProfileUsername();
 
         const result = {
+            platform: PLATFORM,
             username,
             url: window.location.href,
             total: posts.length,
@@ -1260,7 +1321,7 @@
         const json = JSON.stringify(result, null, 2);
         const blob = new Blob([json], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
-        const filename = `${username}_posts_${new Date().toISOString().slice(0, 10)}.json`;
+        const filename = `${username}_${PLATFORM}_posts_${new Date().toISOString().slice(0, 10)}.json`;
 
         const a = document.createElement('a');
         a.href = url;
@@ -1276,22 +1337,27 @@
         const posts = Array.from(collectedPosts.values());
         const username = getProfileUsername();
 
-        const headers = ['code', 'username', 'text', 'time', 'like_count', 'has_video', 'images', 'url'];
-        const rows = posts.map(p => [
-            p.code,
-            p.username,
-            `"${(p.text || '').replace(/"/g, '""').replace(/\n/g, ' ')}"`,
-            p.time,
-            p.like_count,
-            p.has_video,
-            p.images.length,
-            p.url,
-        ]);
+        const headers = PLATFORM === 'threads'
+            ? ['code', 'username', 'text', 'time', 'like_count', 'has_video', 'images', 'url']
+            : ['code', 'username', 'text', 'time', 'like_count', 'retweet_count', 'reply_count', 'has_video', 'images', 'url'];
+
+        const rows = posts.map(p => {
+            const base = [
+                p.code,
+                p.username,
+                `"${(p.text || '').replace(/"/g, '""').replace(/\n/g, ' ')}"`,
+                p.time,
+                p.like_count,
+            ];
+            if (PLATFORM === 'x') base.push(p.retweet_count, p.reply_count);
+            base.push(p.has_video, p.images.length, p.url);
+            return base;
+        });
 
         const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
         const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
-        const filename = `${username}_posts_${new Date().toISOString().slice(0, 10)}.csv`;
+        const filename = `${username}_${PLATFORM}_posts_${new Date().toISOString().slice(0, 10)}.csv`;
 
         const a = document.createElement('a');
         a.href = url;
@@ -1308,6 +1374,7 @@
         const username = getProfileUsername();
 
         let md = `# @${username}\n\n`;
+        md += `> Platform: ${PLATFORM}\n`;
         md += `> Scraped: ${new Date().toLocaleDateString('id-ID')}\n`;
         md += `> Total: ${posts.length} posts\n\n---\n\n`;
 
@@ -1317,13 +1384,19 @@
             md += `${post.text || '*(no text)*'}\n\n`;
             if (post.images.length > 0) md += `📷 ${post.images.length}\n\n`;
             if (post.has_video) md += `🎬 Video\n\n`;
-            if (post.like_count > 0) md += `❤️ ${post.like_count}\n\n`;
+            if (PLATFORM === 'x') {
+                if (post.like_count > 0 || post.retweet_count > 0 || post.reply_count > 0) {
+                    md += `❤️ ${post.like_count}  🔁 ${post.retweet_count}  💬 ${post.reply_count}\n\n`;
+                }
+            } else if (post.like_count > 0) {
+                md += `❤️ ${post.like_count}\n\n`;
+            }
             md += `[Open](${post.url})\n\n---\n\n`;
         }
 
         const blob = new Blob([md], { type: 'text/markdown;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
-        const filename = `${username}_posts_${new Date().toISOString().slice(0, 10)}.md`;
+        const filename = `${username}_${PLATFORM}_posts_${new Date().toISOString().slice(0, 10)}.md`;
 
         const a = document.createElement('a');
         a.href = url;
@@ -1341,4 +1414,14 @@
     }
 
     setTimeout(init, 2000);
+
+    // Re-check resume state / re-attach panel across SPA navigations (X is a heavier SPA)
+    let lastPath = window.location.pathname;
+    setInterval(() => {
+        if (window.location.pathname !== lastPath) {
+            lastPath = window.location.pathname;
+            if (!document.getElementById('ts-panel')) createPanel();
+            else checkResumableSession();
+        }
+    }, 1500);
 })();
